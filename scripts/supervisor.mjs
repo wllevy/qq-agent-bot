@@ -2,12 +2,15 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import '../dist/src/config.js';
+import { runtimePaths } from '../dist/src/paths.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
 if (!existsSync(resolve(root, 'dist/src/main.js'))) throw new Error('缺少构建产物，请先运行 npm run build');
-mkdirSync('data', { recursive: true });
-const pidFile = 'data/supervisor.pid', stopFile = 'data/stop';
+const dataDir = runtimePaths().dataDir;
+mkdirSync(dataDir, { recursive: true });
+const pidFile = resolve(dataDir, 'supervisor.pid'), stopFile = resolve(dataDir, 'stop');
 if (existsSync(pidFile)) {
   const pid = Number(readFileSync(pidFile, 'utf8'));
   try { process.kill(pid, 0); console.error(`监督进程已运行：${pid}`); process.exit(1); }

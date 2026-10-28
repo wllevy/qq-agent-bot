@@ -1,11 +1,14 @@
-import 'dotenv/config';
+import { config as loadEnv } from 'dotenv';
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { resolve, join } from 'node:path';
+import { join } from 'node:path';
+import { runtimePaths } from './paths.js';
+
+loadEnv({ path: runtimePaths().configFile, quiet: true });
 
 export interface MachineConfig { id: string; endpoint: string }
 function machines(): MachineConfig[] {
-  const path = resolve(process.env.BOT_MACHINES_FILE || 'machines.json');
+  const path = runtimePaths().machinesFile;
   if (!existsSync(path)) {
     const entries = [...(process.env.CODEX_ENABLED === 'false' ? [] : [{ id: 'local', endpoint: defaultEndpoint() }]), ...(process.env.CLAUDE_ENABLED === 'false' ? [] : [{ id: 'claude', endpoint: 'claude' }])];
     if (!entries.length) throw new Error('至少启用 Codex 或 Claude 一个后端');
@@ -26,7 +29,7 @@ export function configuration() {
     allowedUsers: (process.env.QQBOT_ALLOWED_USERS || '').split(',').map(s => s.trim()).filter(Boolean),
     appId, appSecret, machines: machines(),
     socket: defaultEndpoint(),
-    dataDir: resolve(process.env.BOT_DATA_DIR || 'data'),
+    dataDir: runtimePaths().dataDir,
     pollMs: Math.max(1000, Number(process.env.BOT_POLL_MS) || 3000),
     keyboards: process.env.QQBOT_KEYBOARDS !== 'false',
   };
@@ -41,5 +44,6 @@ export function errorText(error: unknown): string {
 }
 
 export function log(message: string, error?: unknown) {
-  console.log(new Date().toISOString(), errorText(message), error === undefined ? '' : errorText(error));
+  const output = process.argv.includes('--json') ? console.error : console.log;
+  output(new Date().toISOString(), errorText(message), error === undefined ? '' : errorText(error));
 }

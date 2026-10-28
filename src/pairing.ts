@@ -38,6 +38,10 @@ export class PairingAccess {
     return value;
   }
   allowed(senderId: string): boolean { return allowedUser(this.configuredUsers, senderId) || allowedUser(this.users(), senderId); }
+  current(): Challenge | undefined {
+    const value = read(join(this.directory, 'challenge.json'));
+    return challenge(value) && value.expiresAt > this.now() ? value : undefined;
+  }
   begin(): Challenge {
     const active = read(join(this.directory, 'challenge.json'));
     if (challenge(active) && active.expiresAt > this.now()) throw new Error('已有配对正在等待，请完成或取消后重试');

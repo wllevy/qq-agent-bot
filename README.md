@@ -24,21 +24,25 @@ QQ Agent Bot 将本机 Codex 和 Claude Code 接入 QQ：浏览与创建会话�
 
 ### 1. 准备账户与环境
 
-- 安装 Node.js 24+ 和 Git。
+- 使用 Windows PowerShell 5.1 或 PowerShell 7。安装器会准备 Node.js 24+；无需预装 Git。
 - 在 [QQ 开放平台](https://q.qq.com/) 创建支持私聊的机器人，准备 AppID / AppSecret。菜单、Markdown 和文件能力取决于平台授予的权限。
-- 按需准备 Codex 或 Claude，至少启用一个后端。Codex 使用已登录的桌面应用；Claude 需要在安装依赖后完成 [SDK 登录](#claude-登录与权限)。
+- 按需准备 Codex 或 Claude，至少启用一个后端。Codex 使用已登录的桌面应用；Claude 在安装后完成 [SDK 登录](#claude-登录与权限)。
 
 ### 2. 安装并配置
 
 ```powershell
-git clone https://github.com/wllevy/qq-agent-bot.git
-cd qq-agent-bot
-npm ci
-npm run build
-npm run setup
+irm https://github.com/wllevy/qq-agent-bot/releases/latest/download/install.ps1 | iex
 ```
 
-向导会引导填写 QQ 凭据、选择后端和 Claude 权限模式，并提供诊断、QQ 配对及后台启动选项。AppSecret 不回显；已有配置可以按回车保留。
+安装器下载已编译发布包和生产依赖，默认安装到 `%LOCALAPPDATA%\QQAgentBot`，将命令加入当前用户 PATH。无需管理员权限；新终端中可使用 `qq-agent-bot`。也可先[查看安装脚本](scripts/install.ps1)，下载后运行。
+
+随后向导引导填写 QQ 凭据、选择后端和 Claude 权限模式，检查登录与连接，并提供 QQ 配对及后台启动选项。AppSecret 不回显；已有配置可以按回车保留。登录未完成时会明确停在待处理状态，完成登录后重跑 `qq-agent-bot setup` 即可继续。
+
+**交给 Agent 安装：** 将下面这段话发给你的编程 Agent：
+
+> 请阅读 https://github.com/wllevy/qq-agent-bot/blob/main/docs/agent-install.md ，按其中流程安装并配置 QQ Agent Bot。需要登录或确认 QQ 身份时让我完成，不要在聊天里索取 AppSecret。
+
+已有源码部署请先按[迁移步骤](#从源码部署迁移)保留会话与订阅，再配置新安装。
 
 配对时，在 QQ 私聊中发送终端显示的配对码，再回到电脑确认申请。完整流程见 [QQ 配对](#qq-配对)。
 
@@ -47,12 +51,12 @@ npm run setup
 如果没有在向导中启用后台启动，运行：
 
 ```powershell
-npm start
+qq-agent-bot start
 ```
 
-在 QQ 私聊中发送 **会话**，选择一个会话后即可发任务。需要底部菜单和指令面板时，运行一次 `npm run menus`。
+在 QQ 私聊中发送 **会话**，选择一个会话后即可发任务。需要底部菜单和指令面板时，运行一次 `qq-agent-bot menus`。
 
-遇到连接问题，运行 `npm run doctor`。它检查后端读取、Claude 登录状态和 QQ 鉴权，不调用模型、不发送聊天。
+遇到连接问题，运行 `qq-agent-bot doctor`。它检查后端读取、Claude 登录状态和 QQ 鉴权，不调用模型、不发送聊天。
 
 ## 使用示例
 
@@ -87,16 +91,27 @@ Codex 桌面接入使用内部 IPC，最初验证版本为 **26.1021.3705.0**；
 
 ## 配置
 
-配置保存在项目目录 `.env`，运行数据默认在 `data/`。运行命令时请位于项目根目录；更新程序时保留这两处。
+安装版默认目录如下，可用 `qq-agent-bot paths` 查看实际位置。`QQ_AGENT_HOME` 决定安装版配置和数据根目录，稳定启动命令会自动设置它。
 
-重跑 `npm run setup` 会保留已有值，不修改会话、订阅和已保存的 Claude 会话权限。Bot 正在运行时，先等任务结束再停止；单独新增配对无需停机。
+```text
+%LOCALAPPDATA%\QQAgentBot\
+  bin\                  稳定命令入口
+  versions\0.4.0\       程序与生产依赖
+  config\.env           QQ 凭据与后端配置
+  data\                 会话、订阅、附件、配对和日志
+  current.json          当前程序版本
+```
+
+源码运行时不设置 `QQ_AGENT_HOME`，沿用项目目录 `.env` 和 `data/`，命令在项目根目录执行。两种运行方式使用相同后端与消息订阅逻辑。
+
+重跑 `qq-agent-bot setup` 会保留已有值，不修改会话、订阅和已保存的 Claude 会话权限。Bot 正在运行时，先等任务结束再停止；单独新增配对无需停机。源码部署对应命令为 `npm run setup`。
 
 ### QQ 配对
 
 setup 内可以直接配对，也可单独运行：
 
 ```powershell
-npm run pair
+qq-agent-bot pair
 ```
 
 1. 本机终端显示一个有效期 5 分钟的配对码。
@@ -106,32 +121,32 @@ npm run pair
 没有运行中的 Bot 时，pair 会临时连接 QQ，仅处理配对；已有 Bot 时由它接收申请。配对记录按 AppID 保存在 `data/pairing/`，运行中的 Bot 即时读取，无需重启。错误、过期或已使用的配对码不能授权；退出终端或拒绝申请不会添加授权。
 
 ```powershell
-npm run pair -- list
-npm run pair -- revoke <senderId>
+qq-agent-bot pair list
+qq-agent-bot pair revoke <senderId>
 ```
 
 也可在 `.env` 的 `QQBOT_ALLOWED_USERS` 中配置静态 senderId，逗号分隔。该 ID 是 Bot 收到的用户标识，不是 QQ 号码。静态授权和配对授权取并集；两者都为空时拒绝所有控制消息。撤销配对不会移除静态授权，也不会停止已提交任务或取消结果订阅。
 
 ### Claude 登录与权限
 
-使用 Bot 所在 Windows 用户完成 SDK 登录。Windows x64 默认命令：
+使用 Bot 所在 Windows 用户完成 SDK 登录，安装版运行：
 
 ```powershell
-& ".\node_modules\@anthropic-ai\claude-agent-sdk-win32-x64\claude.exe" auth login --claudeai
+qq-agent-bot claude-login
 ```
 
-打开命令给出的浏览器链接授权；远程终端可使用浏览器返回的授权码。其他架构使用匹配的 CLI。已有 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN` 或 API key 会影响认证来源，需与预期账户一致。
+此命令调用 SDK 依赖自带的 CLI，无需额外全局安装 Claude CLI。打开命令给出的浏览器链接授权；远程终端可使用浏览器返回的授权码。源码部署可运行 `npm run cli -- claude-login`。已有 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN` 或 API key 会影响认证来源，需与预期账户一致。
 
 `CLAUDE_PERMISSION_MODE=default` 使用权限确认；`bypassPermissions` 为 YOLO，允许免确认执行工具。此配置用于新会话及恢复副本，已有 Bot 会话续聊保留保存时的权限模式；问题澄清仍通过 QQ 回答。
 
 ### 启动与诊断
 
 ```powershell
-npm run doctor
-npm start
+qq-agent-bot doctor
+qq-agent-bot start
 ```
 
-`doctor` 检查后端历史读取、Claude CLI 登录状态和 QQ 鉴权，不调用模型、不发送聊天。`npm start` 运行构建后的 JavaScript，不需要 tsx 或 TypeScript 开发依赖。`npm run menus` 可设置此机器人的全局私聊菜单与指令面板。
+`doctor` 检查后端历史读取、Claude CLI 登录状态和 QQ 鉴权，不调用模型、不发送聊天。`doctor --json` 返回机器可读状态；`service status --json` 的 `online` 才表示后台 QQ 连接已就绪。启动运行构建后的 JavaScript，不需要 tsx 或 TypeScript 开发依赖。
 
 手动配置可从 `.env.example` 复制为 `.env`。`CODEX_ENABLED=false` 或 `CLAUDE_ENABLED=false` 可关闭对应后端；至少启用一个。
 
@@ -170,26 +185,42 @@ npm start
 ## Windows 后台运行与更新
 
 ```powershell
-npm run service -- start
-npm run service -- status
-npm run service -- stop
-npm run service -- restart
-npm run service -- enable
-npm run service -- disable
+qq-agent-bot service start
+qq-agent-bot service status
+qq-agent-bot service stop
+qq-agent-bot service restart
+qq-agent-bot service enable
+qq-agent-bot service disable
 ```
 
 `enable` 设置当前用户登录启动并立即启动，`disable` 仅取消登录启动。后台运行编译后的程序，日志在 `data/bot.log` 和 `data/bot-error.log`。
 
-更新源码后，先等待 Bot 管理的任务结束，再停止、安装依赖、构建并启动：
+安装版更新：先等待 Bot 管理的任务结束，再停止、下载并运行安装器。`-SkipSetup` 保留现有配置，安装完成后诊断并启动：
 
 ```powershell
-npm run service -- stop
-npm ci
-npm run build
-npm run service -- start
+qq-agent-bot service stop
+$Installer = Join-Path $env:TEMP 'qq-agent-bot-install.ps1'
+Invoke-WebRequest -UseBasicParsing https://github.com/wllevy/qq-agent-bot/releases/latest/download/install.ps1 -OutFile $Installer
+& $Installer -SkipSetup
+qq-agent-bot doctor
+qq-agent-bot service start
 ```
 
-重启会中断 Bot 运行的 Claude 和辅助 app-server 任务。代码更新需要重新构建；配置和运行数据不要覆盖。
+下载和依赖安装成功后才切换程序版本。配置与数据独立保存，旧版本保留；已启用的登录启动任务通过稳定入口读取新版本。`-Version vX.Y.Z` 可选择版本，其他安装参数见 [Agent 安装指南](docs/agent-install.md)。
+
+重启会中断 Bot 运行的 Claude 和辅助 app-server 任务。源码更新使用 `npm run service -- stop`、`npm ci`、`npm run build`、`npm run service -- start`。
+
+### 从源码部署迁移
+
+安装器用 `-SkipSetup` 安装程序。等待旧 Bot 任务完成，在旧项目目录执行 `npm run service -- disable` 和 `npm run service -- stop`，然后在新终端执行：
+
+```powershell
+qq-agent-bot migrate --from 'C:\path\to\old-bot' --json
+qq-agent-bot doctor
+qq-agent-bot service enable
+```
+
+迁移复制 v4 会话、订阅、Claude 权限、附件和配对记录，保留原目录。新安装必须尚未配置：已有 `config` 或 `data` 时拒绝覆盖，所以迁移要在首次 setup、doctor 或 pair **之前**执行。同一 QQ AppID 的旧实例应保持停止；不要同时启动新旧部署。
 
 ## 工作方式
 
@@ -204,16 +235,28 @@ Codex 与 Claude 的接入和会话执行由各自适配器负责；QQ 侧统一
 
 ## 开发与验证
 
+源码安装要求 Git 和 Node.js 24+：
+
+```powershell
+git clone https://github.com/wllevy/qq-agent-bot.git
+cd qq-agent-bot
+npm ci
+npm run build
+npm run setup
+```
+
 ```powershell
 npm run dev          # 通过 tsx 运行源码
 npm run check        # 类型检查
 npm test             # 不调用模型的行为测试
 npm run build        # 输出 dist/src 与 dist/scripts
+npm run cli -- --help # 统一命令入口
+npm run package:release # 将编译产物和运行文件打包到 release/package
 npm run smoke        # 实际 Codex 自检
 npm run smoke:claude # 实际 Claude 自检
 ```
 
-两个 smoke 命令会创建独立自检会话并使用账户额度。Windows CI 执行类型检查、测试、构建及配置命令帮助入口检查。
+两个模型 smoke 命令会创建独立自检会话并使用账户额度。Windows CI 执行类型检查、测试、构建；发布工作流额外用隔离目录测试生产依赖安装、JSON 配置和保留数据的版本更新，不登录 QQ、不调用模型。推送与 package.json 版本一致的 `vX.Y.Z` 标签后，工作流生成发布 ZIP 和安装脚本。
 
 导出可分享的源码：
 

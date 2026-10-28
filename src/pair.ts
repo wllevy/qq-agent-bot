@@ -7,6 +7,7 @@ import { PairingAccess, handlePairing } from './pairing.js';
 import { confirm } from './prompt.js';
 import { makeBot, QQSender } from './qq.js';
 import { Store } from './store.js';
+import { argumentsFor } from './arguments.js';
 
 export function botRunning(dataDir: string): boolean {
   try {
@@ -63,25 +64,44 @@ export async function runPairing(config = configuration()) {
 }
 
 async function main() {
-  const [command, user] = process.argv.slice(2);
-  if (command === '--help') {
-    console.log('npm run pair：生成短时配对码，在 QQ 提交后本机确认\nnpm run pair -- list：查看配对授权\nnpm run pair -- revoke <senderId>：撤销配对授权（不取消 QQBOT_ALLOWED_USERS 静态授权）'); return;
+  const { positional, options } = argumentsFor(process.argv.slice(2), ['--help', '--json'], ['--user']);
+  const [command, user] = positional;
+  if (positional.length > (['approve', 'cancel', 'revoke'].includes(command || '') ? 2 : 1)) throw new Error('多余的位置参数，运行 pair --help');
+  if (options['--user'] && command !== 'approve') throw new Error('--user 仅用于 approve');
+  const emit = (value: object) => console.log(JSON.stringify(value));
+  if (options['--help']) {
+    console.log('pair：交互配对\npair start --json：Bot 运行时开始配对\npair status --json：查看待确认申请\npair approve <requestId> --user <senderId> --json：本机批准已确认的身份\npair cancel <requestId> --json：取消配对\npair list / revoke <senderId>：查看或撤销授权'); return;
   }
-  if (command && command !== 'list' && command !== 'revoke') throw new Error('未知命令，运行 npm run pair -- --help');
-  if (!command) { await runPairing(); return; }
+  if (command && !['list', 'revoke', 'start', 'status', 'approve', 'cancel'].includes(command)) throw new Error('未知命令，运行 pair --help');
+  if (!command) { if (options['--json']) throw new Error('请选择 start/status/approve 等非交互子命令'); await runPairing(); return; }
   const config = configuration(), access = new PairingAccess(config.dataDir, config.appId, config.allowedUsers);
+  if (command === 'status') {
+    const active = access.current(), pending = active && access.pending(active.code);
+    emit({ status: pending ? 'needs_confirmation' : active ? 'waiting_for_qq' : 'inactive', ...(active ? { requestId: active.code, expiresAt: active.expiresAt } : {}), ...(pending ? { senderId: pending.senderId } : {}) }); return;
+  }
   if (command === 'list') {
+    if (options['--json']) { emit({ status: 'ok', users: access.users(), configuredUsers: config.allowedUsers }); return; }
     console.log('配对授权：\n' + (access.users().join('\n') || '无'));
     console.log(`静态授权：${config.allowedUsers.length} 个（在 .env 中管理）`); return;
   }
-  if (!user) throw new Error('请指定要撤销的 senderId');
   const unlock = Store.lock(access.directory);
   try {
+    if (command === 'start') {
+      if (!botRunning(config.dataDir)) { emit({ status: 'needs_service', next: 'service start' }); process.exitCode = 2; return; }
+      const active = access.begin(); emit({ status: 'waiting_for_qq', requestId: active.code, code: active.code, expiresAt: active.expiresAt }); return;
+    }
+    if (!user) throw new Error('需要指定 requestId 或 senderId');
+    if (command === 'approve') {
+      if (!options['--user']) throw new Error('批准时必须用 --user 指定已确认的 senderId');
+      access.approve(user, String(options['--user'])); emit({ status: 'authorized' }); return;
+    }
+    if (command === 'cancel') { access.cancel(user); emit({ status: 'cancelled' }); return; }
     const stillConfigured = access.revoke(user);
+    if (options['--json']) { emit({ status: 'revoked', stillConfigured }); return; }
     console.log('已撤销配对授权。' + (stillConfigured ? '该用户仍在 QQBOT_ALLOWED_USERS 中，请从 .env 移除并重启以完全撤销。' : '后续控制消息将被拒绝；已提交任务与通知订阅保持不变。'));
   } finally { unlock(); }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await main().catch(error => { console.error(errorText(error)); process.exitCode = 1; });
+  await main().catch(error => { if (process.argv.includes('--json')) console.log(JSON.stringify({ status: 'error', message: errorText(error) })); else console.error(errorText(error)); process.exitCode = 1; });
 }

@@ -1,0 +1,39 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Validate version
+        shell: pwsh
+        run: |
+          $Version = (Get-Content package.json | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$Version") { throw 'Tag and package version differ' }
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - run: npm run package:release
+      - name: Package and test installation
+        shell: pwsh
+        run: |
+          $Version = (Get-Content package.json | ConvertFrom-Json).version
+          Compress-Archive -Path release/package/* -DestinationPath "release/qq-agent-bot-v$Version.zip"
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-smoke.ps1 -PackagePath "release/qq-agent-bot-v$Version.zip"
+          if ($LASTEXITCODE -ne 0) { throw 'Installation smoke test failed' }
+      - name: Publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $Version = (Get-Content package.json | ConvertFrom-Json).version
+          gh release create "v$Version" "release/qq-agent-bot-v$Version.zip" scripts/install.ps1 --verify-tag --generate-notes --title "QQ Agent Bot v$Version"

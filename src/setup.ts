@@ -6,26 +6,33 @@ import { parse } from 'dotenv';
 import { configuration, errorText } from './config.js';
 import { ask, confirm } from './prompt.js';
 import { botRunning, runPairing } from './pair.js';
-import { readEnvFile, saveEnvFile, updateEnv } from './setup-config.js';
-
-async function runNode(relative: string) {
-  const path = fileURLToPath(new URL(relative, import.meta.url));
-  return new Promise<boolean>((resolve, reject) => {
-    const child = spawn(process.execPath, [path], { stdio: 'inherit', windowsHide: true });
-    child.on('error', reject); child.on('exit', code => resolve(code === 0));
-  });
-}
+import { readEnvFile, saveEnvFile, updateEnv, validateSettings } from './setup-config.js';
+import { runtimePaths } from './paths.js';
+import { argumentsFor } from './arguments.js';
+import { diagnose } from './doctor.js';
 
 async function setup() {
-  if (process.argv.includes('--help')) {
-    console.log('npm run setup：在本机交互配置 QQ 凭据和后端、检查连接、配对 QQ，并可设置登录启动。\n已有配置按回车保留，AppSecret 不回显。运行中的 Bot 请先等待任务完成再停止；仅新增授权可使用 npm run pair。'); return;
+  const { options, positional } = argumentsFor(process.argv.slice(2), ['--help', '--non-interactive', '--json'], ['--config-file']);
+  if (positional.length) throw new Error('setup 不接受位置参数');
+  if (options['--help']) {
+    console.log('setup：交互配置；setup --non-interactive --config-file <本地 JSON> --json：校验并保存配置，不启动、不登录、不自动授权。\n已有配置按回车保留，AppSecret 不回显。运行中的 Bot 请先等待任务完成再停止；仅新增授权可使用 pair。'); return;
   }
-  if (!process.stdin.isTTY) throw new Error('请在 PowerShell 等交互终端中运行 npm run setup');
-  const path = resolve('.env'), source = readEnvFile(path);
-  if (botRunning(resolve(process.env.BOT_DATA_DIR || 'data'))) throw new Error('Bot 正在运行。请等待任务完成后 npm run service -- stop，再运行 setup；仅配对请用 npm run pair');
+  if (!options['--non-interactive'] && !process.stdin.isTTY) throw new Error('请在交互终端运行 setup，或使用 --non-interactive --config-file');
+  const paths = runtimePaths(), path = paths.configFile, source = readEnvFile(path);
+  if (botRunning(paths.dataDir)) throw new Error('Bot 正在运行。请等待任务完成后停止，再运行 setup；仅配对请用 pair');
+  if (options['--non-interactive']) {
+    if (!options['--config-file']) throw new Error('非交互配置需要 --config-file <本地 JSON>');
+    const previous = parse(source);
+    const updates = validateSettings(JSON.parse(readFileSync(resolve(String(options['--config-file'])), 'utf8')), previous);
+    const template = source || readFileSync(new URL('../../.env.example', import.meta.url), 'utf8');
+    saveEnvFile(path, source, updateEnv(template, updates));
+    console.log(options['--json'] ? JSON.stringify({ status: 'configured', configFile: path, next: 'doctor --json' }) : '配置已保存；请运行 doctor 检查登录与连接，再启动及配对。');
+    return;
+  }
+  if (options['--json'] || options['--config-file']) throw new Error('--json 和 --config-file 需配合 --non-interactive');
   const previous = { ...parse(source), ...process.env };
   const updates: Record<string, string> = {};
-  console.log('QQ 编程助手配置。回车保留已有值；配置保存在当前目录 .env。');
+  console.log(`QQ 编程助手配置。回车保留已有值；配置文件：${path}`);
   console.log('在 QQ 开放平台 https://q.qq.com/ 创建支持私聊的机器人，准备 AppID 和 AppSecret。');
   const currentAppId = previous.QQBOT_APP_ID || previous.AppID || previous.APPID;
   const appId = await ask(`QQ AppID${currentAppId ? '（回车保留）' : ''}：`) || currentAppId;
@@ -36,7 +43,7 @@ async function setup() {
   updates.QQBOT_APP_ID = appId; updates.QQBOT_APP_SECRET = appSecret;
   // A different QQ application has different sender IDs; do not reuse its static grants.
   if (currentAppId && appId !== currentAppId) updates.QQBOT_ALLOWED_USERS = '';
-  const customMachines = existsSync(resolve(previous.BOT_MACHINES_FILE || 'machines.json'));
+  const customMachines = existsSync(paths.machinesFile);
   if (customMachines) console.log('检测到 machines.json，将保留其中的后端配置。');
   else {
     const current = previous.CODEX_ENABLED === 'false' ? '3' : previous.CLAUDE_ENABLED === 'false' ? '2' : '1';
@@ -53,21 +60,23 @@ async function setup() {
     if (previous.ANTHROPIC_BASE_URL || previous.ANTHROPIC_AUTH_TOKEN || previous.ANTHROPIC_API_KEY) console.log('检测到 ANTHROPIC_* 认证或地址配置，请确认是预期账户来源；不会显示或修改凭据。');
   }
   const template = source || readFileSync(new URL('../../.env.example', import.meta.url), 'utf8');
-  const next = updateEnv(template, updates);
+  const next = updateEnv(template, validateSettings(updates, parse(source)));
   saveEnvFile(path, source, next);
   // The config module loaded before the wizard. Apply saved settings for this process
   // and its doctor child without changing unrelated inherited authentication variables.
   Object.assign(process.env, parse(next));
   console.log('配置已保存。已有会话、订阅和 Claude 会话权限未变。');
-  if (await confirm('现在运行 doctor 检查后端读取及 QQ 鉴权？')) await runNode('./doctor.js');
+  const report = await diagnose();
+  for (const check of report.checks) console.log(`${check.ok ? 'OK' : '待处理'} ${check.name}：${check.message}`);
+  if (!['ready', 'needs_pairing'].includes(report.status)) { console.log('配置已保存，但尚不可用。完成上述登录或连接修复后重新运行 setup。'); process.exitCode = 1; return; }
   if (await confirm('现在配对你的 QQ？')) await runPairing(configuration());
   if (process.platform === 'win32' && await confirm('设置当前 Windows 用户登录后自动启动 Bot，并立即启动？')) {
-    const script = fileURLToPath(new URL('../../scripts/windows-service.ps1', import.meta.url));
+    const script = fileURLToPath(new URL('./cli.js', import.meta.url));
     await new Promise<void>((resolve, reject) => {
-      const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, 'enable'], { stdio: 'inherit', windowsHide: true });
+      const child = spawn(process.execPath, [script, 'service', 'enable'], { stdio: 'inherit', windowsHide: true });
       child.on('error', reject); child.on('exit', code => code === 0 ? resolve() : reject(new Error('后台服务设置失败')));
     });
-  } else console.log('配置完成。前台运行：npm start；Windows 后台：npm run service -- start。');
+  } else console.log(paths.home ? '配置已保存。前台运行：qq-agent-bot start；后台：qq-agent-bot service start。' : '配置已保存。前台运行：npm start；Windows 后台：npm run service -- start。');
 }
 
-await setup().catch(error => { console.error(errorText(error)); process.exitCode = 1; });
+await setup().catch(error => { if (process.argv.includes('--json')) console.log(JSON.stringify({ status: 'error', message: error instanceof SyntaxError ? '配置文件不是有效的 JSON' : errorText(error) })); else console.error(errorText(error)); process.exitCode = 1; });

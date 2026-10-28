@@ -8,4 +8,8 @@ The bot can read files and run coding tasks with the operating-system privileges
 
 Never publish `.env`, `data/`, authentication files, attachments, logs or deployment backups. `npm run export:source` copies only the source allowlist to a new directory. Inspect the exported directory before publishing.
 
+Installed deployments keep credentials in `%LOCALAPPDATA%/QQAgentBot/config/.env` and runtime state in the adjacent `data` directory. Release packages contain compiled code and public configuration templates only; the installer downloads production dependencies from npm and, when needed, a private Node.js runtime from nodejs.org. Program updates do not overwrite configuration or data.
+
+Agent setup accepts secrets through a local JSON file, never command-line flags. Treat that input file as a credential file too. Machine-readable pairing still requires a local approval command with the exact request and sender IDs; the agent must obtain the operator's identity confirmation before invoking it. Diagnostic success, QQ gateway connection and control authorization are reported separately.
+
 Project source is distributed under the MIT license in `LICENSE`. Dependencies retain their own licenses and service terms.

@@ -1,4 +1,5 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync, renameSync } from 'node:fs';
+import { join } from 'node:path';
 import { PairingAccess, handlePairing } from './pairing.js';
 import { configuration, errorText, log } from './config.js';
 import { createBackend } from './client.js';
@@ -10,6 +11,12 @@ import { Store } from './store.js';
 const config = configuration();
 mkdirSync(config.dataDir, { recursive: true, mode: 0o700 });
 const unlock = Store.lock(config.dataDir);
+function status(state: string) {
+  const file = join(config.dataDir, 'runtime-status.json');
+  writeFileSync(`${file}.tmp`, JSON.stringify({ pid: process.pid, state, updatedAt: new Date().toISOString() }));
+  renameSync(`${file}.tmp`, file);
+}
+status('starting');
 const access = new PairingAccess(config.dataDir, config.appId, config.allowedUsers);
 const store = new Store(config.dataDir);
 const codex = new MachineCodex(Object.fromEntries(config.machines.map(machine => [machine.id, createBackend(machine.endpoint, config.dataDir, true)])));
@@ -37,11 +44,12 @@ async function online(message: string) {
   catch (error) { log('恢复入站消息失败', error); }
   if (stopping) return;
   ready = true;
+  status('online');
   refresh();
 }
 bot.on('ready', () => online('QQ 私聊 Bot 已上线'));
 bot.on('resumed', () => online('QQ 连接已恢复'));
-bot.on('disconnected', () => { ready = false; log('QQ 已断线，等待自动重连'); });
+bot.on('disconnected', () => { ready = false; status(stopping ? 'stopping' : 'disconnected'); log('QQ 已断线，等待自动重连'); });
 bot.on('error', error => log('QQ 连接错误', error));
 bot.on('message', async (_ctx, message) => {
   if (stopping || message.kind !== 'c2c') return;
@@ -71,6 +79,7 @@ const timer = setInterval(refresh, config.pollMs);
 function shutdown(): Promise<void> {
   if (shutdownWork) return shutdownWork;
   stopping = true; ready = false; clearInterval(timer);
+  status('stopping');
   // Stop admitting work before aborting I/O. Keep the process lock until all
   // callbacks have settled and their final state has been saved.
   const draining = app.shutdown();
@@ -80,7 +89,7 @@ function shutdown(): Promise<void> {
     await closingBackend;
     await sender.drain();
     store.save();
-    unlock();
+    status('stopped'); unlock();
     log('Bot 已停止');
   })();
   return shutdownWork;

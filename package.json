@@ -1,6 +1,6 @@
 {
   "name": "qq-codex-console",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -17,7 +17,9 @@
     "smoke:claude": "tsx scripts/claude-smoke.ts",
     "service": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows-service.ps1",
     "menus": "node dist/scripts/menus.js",
-    "export:source": "node scripts/export-source.mjs"
+    "export:source": "node scripts/export-source.mjs",
+    "cli": "node dist/src/cli.js",
+    "package:release": "node scripts/package-release.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.310",
@@ -35,7 +37,12 @@
     "node": ">=24"
   },
   "description": "QQ private-chat interface for local Codex and Claude Code sessions",
-  "repository": { "type": "git", "url": "https://github.com/wllevy/qq-agent-bot.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wllevy/qq-agent-bot.git"
+  },
   "homepage": "https://github.com/wllevy/qq-agent-bot#readme",
-  "bugs": { "url": "https://github.com/wllevy/qq-agent-bot/issues" }
+  "bugs": {
+    "url": "https://github.com/wllevy/qq-agent-bot/issues"
+  }
 }
