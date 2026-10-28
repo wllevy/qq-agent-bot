@@ -17,5 +17,5 @@ for (const directory of ['src', 'test', 'scripts', 'docs', '.github/workflows'])
   }
 }
 mkdirSync(join(target, 'docs/images'), { recursive: true });
-cpSync(join(root, 'docs/images/qq-menu.jpg'), join(target, 'docs/images/qq-menu.jpg'));
+for (const name of ['qq-menu.jpg', 'qq-markdown.jpg']) cpSync(join(root, 'docs/images', name), join(target, 'docs/images', name));
 console.log(target);
