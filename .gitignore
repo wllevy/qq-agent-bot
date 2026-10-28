@@ -1,0 +1,12 @@
+.env
+node_modules/
+data/
+dist/
+*.log
+machines.json
+.runtime/
+
+.env.*
+!.env.example
+*-output.txt
+release/
