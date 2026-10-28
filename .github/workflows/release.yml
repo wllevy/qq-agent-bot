@@ -5,7 +5,20 @@ on:
 permissions:
   contents: write
 jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run check && npm test && npm run build && npm run package:release
+      - run: tar -czf release/qq-agent-bot.tar.gz -C release/package .
+      - run: node scripts/unix-smoke.mjs release/qq-agent-bot.tar.gz
   release:
+    needs: linux
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +41,7 @@ jobs:
         run: |
           $Version = (Get-Content package.json | ConvertFrom-Json).version
           Compress-Archive -Path release/package/* -DestinationPath "release/qq-agent-bot-v$Version.zip"
+          tar -czf release/qq-agent-bot.tar.gz -C release/package .
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-smoke.ps1 -PackagePath "release/qq-agent-bot-v$Version.zip"
           if ($LASTEXITCODE -ne 0) { throw 'Installation smoke test failed' }
       - name: Publish
@@ -36,4 +50,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $Version = (Get-Content package.json | ConvertFrom-Json).version
-          gh release create "v$Version" "release/qq-agent-bot-v$Version.zip" scripts/install.ps1 --verify-tag --generate-notes --title "QQ Agent Bot v$Version"
+          gh release create "v$Version" "release/qq-agent-bot-v$Version.zip" release/qq-agent-bot.tar.gz scripts/install.ps1 scripts/install.sh --verify-tag --generate-notes --title "QQ Agent Bot v$Version"

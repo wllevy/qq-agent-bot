@@ -36,7 +36,7 @@ npm run smoke        # 实际 Codex 自检
 npm run smoke:claude # 实际 Claude 自检
 ```
 
-两个模型 smoke 命令会创建独立自检会话并使用账户额度。Windows CI 执行类型检查、测试、构建；发布工作流额外用隔离目录测试生产依赖安装、JSON 配置和保留数据的版本更新，不登录 QQ、不调用模型。推送与 package.json 版本一致的 `vX.Y.Z` 标签后，工作流生成发布 ZIP 和安装脚本。
+两个模型 smoke 命令会创建独立自检会话并使用账户额度。Windows 和 Linux CI 执行类型检查、测试、构建；发布工作流额外用隔离目录测试生产依赖安装、JSON 配置和保留数据的版本更新，不登录 QQ、不调用模型。推送与 package.json 版本一致的 `vX.Y.Z` 标签后，工作流生成 ZIP、tar.gz 和 PowerShell/Bash 安装脚本。macOS 不运行 CI，当前标为未实机测试。
 
 导出可分享的源码：
 

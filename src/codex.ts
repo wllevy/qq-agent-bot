@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { targetPath } from './files.js';
 import { connect as connectSocket } from 'node:net';
 import WebSocket from 'ws';
 import { SubmissionError } from './domain.js';
@@ -95,11 +95,11 @@ export class Codex extends EventEmitter implements CodexPort {
   protected async creationDirectory(cwd: string): Promise<string> {
     if (cwd === '~' || cwd.startsWith('~/')) {
       const result = await this.request('command/exec', { command: ['printenv', 'HOME'], cwd: '/', timeoutMs: 5000, outputBytesCap: 4096 });
-      if (result.exitCode !== 0 || !isAbsolute(result.stdout.trim())) throw new Error('无法读取主目录，请输入完整路径。');
-      cwd = resolve(result.stdout.trim(), cwd.slice(2));
+      if (result.exitCode !== 0 || !targetPath(result.stdout.trim()).isAbsolute(result.stdout.trim())) throw new Error('无法读取主目录，请输入完整路径。');
+      cwd = targetPath(result.stdout.trim()).resolve(result.stdout.trim(), cwd.slice(2));
     }
-    if (!isAbsolute(cwd)) throw new Error('请输入项目的绝对目录路径。');
-    cwd = resolve(cwd);
+    if (!targetPath(cwd).isAbsolute(cwd)) throw new Error('请输入项目的绝对目录路径。');
+    cwd = targetPath(cwd).normalize(cwd);
     const metadata = await this.request('fs/getMetadata', { path: cwd });
     if (!metadata.isDirectory) throw new Error('所选路径不是目录，请重新选择。');
     return cwd;
@@ -219,7 +219,7 @@ export class Codex extends EventEmitter implements CodexPort {
     return data;
   }
   async writeFile(_id: string, path: string, data: Buffer): Promise<void> {
-    await this.request('fs/createDirectory', { path: dirname(path), recursive: true });
+    await this.request('fs/createDirectory', { path: targetPath(path).dirname(path), recursive: true });
     await this.request('fs/writeFile', { path, dataBase64: data.toString('base64') });
   }
   async send(id: string, text: string, inputId: string, files: PreparedFile[] = []): Promise<Turn> {

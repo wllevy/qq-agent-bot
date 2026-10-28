@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
+import { claudeExecutable } from './claude-executable.js';
 import './config.js';
 import { runtimePaths } from './paths.js';
 
@@ -17,11 +17,14 @@ if (!command || ['help', '--help'].includes(command)) {
   let executable = process.execPath, childArgs = [fileURLToPath(new URL(entrypoints[command] || './main.js', import.meta.url)), ...args];
   if (command === 'claude-login') {
     if (args.length) throw new Error('claude-login 不接受参数');
-    executable = process.env.CLAUDE_EXECUTABLE || createRequire(import.meta.url).resolve(`@anthropic-ai/claude-agent-sdk-win32-${process.arch}/claude.exe`);
+    executable = claudeExecutable();
     childArgs = ['auth', 'login', '--claudeai'];
   }
   if (command === 'service') {
-    if (process.platform !== 'win32') throw new Error('当前服务安装仅支持 Windows');
+    if (process.platform !== 'win32') {
+      await import('./unix-service.js');
+      process.exit(process.exitCode || 0);
+    }
     executable = 'powershell.exe';
     childArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', fileURLToPath(new URL('../../scripts/windows-service.ps1', import.meta.url)), '-Action', args[0] || 'status', '-NodePath', process.execPath];
     if (runtimePaths().home) childArgs.push('-BotHome', runtimePaths().home!);

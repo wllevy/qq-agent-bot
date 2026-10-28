@@ -2,6 +2,24 @@
 
 [返回首页](../README.md)
 
+## 平台支持
+
+| 平台 | 安装与后台 | 验证范围 |
+| --- | --- | --- |
+| Windows | PowerShell 安装器、后台进程、登录启动 | 已验证 |
+| Linux | Bash 安装器、后台进程、systemd 用户服务 | 在 Linux x86_64 上验证安装、配置、升级、进程管理与测试套件；实际 QQ 聊天和模型执行仍取决于用户账户配置 |
+| macOS | Bash 安装器、后台进程 | **尚未实机测试**；Intel / Apple Silicon 按架构安装，暂不提供 launchd 登录启动 |
+
+Unix 安装器需要 Bash、curl、tar，复用 Node.js 24+ 或下载私有运行时。Linux 的自动运行时下载面向 glibc 系统；Alpine/musl 需自行提供兼容的 Node.js 24+。
+
+Linux 默认安装到 `~/.local/share/qq-agent-bot`，macOS 默认 `~/Library/Application Support/QQAgentBot`。`config`、`data`、`versions` 的结构与 Windows 相同。命令链接到 `~/.local/bin/qq-agent-bot`，需要把 `~/.local/bin` 加入 PATH，或使用安装器输出的完整路径。
+
+Unix 的 Codex 优先连接已有 `~/.codex/app-server-control/app-server-control.sock`，否则运行 PATH 上的 `codex app-server`。需预先安装并登录 Codex CLI，也可用 `CODEX_EXECUTABLE` 指定路径、`CODEX_SOCKET` 指定 app-server 地址，或设为 `stdio`。Unix 版不会使用 Windows 桌面 IPC；同一会话请避免与其他执行端同时提交任务。Claude 继续使用官方 Agent SDK，`claude-login` 自动选择本平台随包安装的 CLI。
+
+`service start/stop/restart/status --json` 在三个平台使用相同入口。Linux 的 `service enable` 注册 `qq-agent-bot.service` 用户服务，`disable` 仅取消自启动；需要可用的 systemd 用户管理器。退出登录后的持续运行取决于系统的用户 linger 设置，安装器不会修改它。macOS 暂时使用后台启动，重启机器后需手动启动。
+
+Unix 更新：等待任务完成后 `qq-agent-bot service stop`，重新下载安装脚本并运行 `bash install.sh --skip-setup`，诊断通过后再启动。脚本支持 `--home`、`--version`、`--package`（tar.gz）、`--node`、`--skip-setup`、`--no-path` 和 `--offline`；迁移仍使用 `migrate --from <旧目录> --json`，需在新安装首次配置前执行。
+
 ## 能力表
 
 | 能力 | Codex | Claude Code |
@@ -58,7 +76,7 @@ qq-agent-bot pair revoke <senderId>
 
 ### Claude 登录与权限
 
-使用 Bot 所在 Windows 用户完成 SDK 登录，安装版运行：
+使用 Bot 所在系统用户完成 SDK 登录，安装版运行：
 
 ```powershell
 qq-agent-bot claude-login
@@ -153,7 +171,7 @@ qq-agent-bot service enable
 
 ## 当前边界
 
-- Windows 以外的平台尚未验证。
+- macOS 尚未实机测试；Linux 的验证范围见平台支持表。
 - 轮询最近 20 轮检测完成，停机过久可能漏过更早结果；QQ 确认丢失后重试可能重复送达。
 - 状态格式为 v4，仅使用消息订阅机制；历史 v1–v3 部署需单独迁移，本版不隐式兼容。
 - 进阶多机可用 `machines.json` 配置 `[{"id":"server","endpoint":"ws://127.0.0.1:PORT"}]`。存在该文件时，它决定后端列表，setup 保留配置；连接由部署者维护，不要把未认证的 app-server 暴露到公网。

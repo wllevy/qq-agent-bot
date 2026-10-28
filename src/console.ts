@@ -1,4 +1,3 @@
-import { basename, isAbsolute } from 'node:path';
 import { findDirectories, rememberDirectories, shortDirectory } from './directories.js';
 import { randomUUID } from 'node:crypto';
 import { errorText, log } from './config.js';
@@ -299,11 +298,11 @@ export class ConsoleApp {
     const token = randomUUID();
     chat.creationMenu = { token, machine, choices, query, page }; delete chat.settingsMenu;
     const offset = page * 8, rows = choices.slice(offset, offset + 8);
-    const buttons: Button[] = rows.map((path, i) => ({ label: `${offset + i + 1}. ${basename(path) || path}`.slice(0, 10), command: `/新建目录 ${token} ${offset + i + 1}` }));
+    const buttons: Button[] = rows.map((path, i) => ({ label: `${offset + i + 1}. ${targetPath(path).basename(path) || path}`.slice(0, 10), command: `/新建目录 ${token} ${offset + i + 1}` }));
     if (page > 0) buttons.push({ label: '上一页', command: `/目录翻页 ${token} ${page - 1}` });
     if (offset + 8 < choices.length) buttons.push({ label: '下一页', command: `/目录翻页 ${token} ${page + 1}` });
     buttons.push({ label: '全部最近目录', command: `/新会话 ${machine}` }, { label: '切换机器', command: '/新会话机器' }, { label: '取消新建', command: '/取消新建' });
-    const lines = rows.map((path, i) => `${offset + i + 1}. **${basename(path) || path}**\n${shortDirectory(path)}`);
+    const lines = rows.map((path, i) => `${offset + i + 1}. **${targetPath(path).basename(path) || path}**\n${shortDirectory(path)}`);
     this.reply(user, `**新建会话 · ${machine}**${query ? '\n搜索：' + query : ''}\n第 ${page + 1}/${Math.max(1, Math.ceil(choices.length / 8))} 页${offline ? '\n机器暂时离线，显示缓存目录；开机后重新点击创建。' : ''}\n\n${lines.join('\n\n') || '没有匹配的历史目录。可以直接输入绝对路径。'}\n\n点击目录或发送编号，即在该目录新建空白会话。\n输入关键词可筛选；输入 F:/项目路径 或 ~/路径 可直接创建。\n/取消新建 返回原会话。`, replyTo, undefined, buttons);
   }
   private finishCreation(user: string, thread: Thread, replyTo: string) {
@@ -372,7 +371,7 @@ export class ConsoleApp {
       const machine = explicitMachine || chat.creationMenu?.machine || (chat.current ? machineOf(chat.current) : chat.menuMachine);
       const query = (explicitMachine ? argument.slice(first.length).trim() : argument).replace(/^<([\s\S]*)>$/, '$1').replace(/^"([\s\S]*)"$/, '$1');
       if (!machine) { this.creationMachines(user, replyTo); return true; }
-      if (isAbsolute(query) || query === '~' || query.startsWith('~/')) await this.createSession(user, machine, query, replyTo);
+      if (targetPath(query).isAbsolute(query) || query === '~' || query.startsWith('~/')) await this.createSession(user, machine, query, replyTo);
       else await this.directoryMenu(user, machine, query, replyTo);
       return true;
     }
@@ -388,7 +387,7 @@ export class ConsoleApp {
     }
     const command = /^(?:Claude|claude|Codex|codex|新建|恢复|批准|拒绝|回答|发送|机器|会话|sessions|菜单|帮助|help|start|选择|切换|最新消息|最新|状态|最后回答|结果|最近|订阅|长期订阅|取消订阅|停止|上一页|下一页|队列|清空队列|文件列表|取文件|清除附件|文件|模型|推理强度|强度|设置模型|设置强度)(?:\s|$)/;
     if (command.test(text.replace(/^\//, ''))) return false;
-    if (menu.machine && (isAbsolute(text) || text === '~' || text.startsWith('~/'))) {
+    if (menu.machine && (targetPath(text).isAbsolute(text) || text === '~' || text.startsWith('~/'))) {
       await this.createSession(user, menu.machine, text, replyTo); return true;
     }
     if (menu.machine && text && !text.startsWith('/')) { await this.directoryMenu(user, menu.machine, text, replyTo); return true; }

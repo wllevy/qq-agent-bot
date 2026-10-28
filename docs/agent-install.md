@@ -1,8 +1,17 @@
 # Agent 安装与配置
 
-目标：在当前 Windows 用户下安装 QQ Agent Bot，配置 QQ 凭据及至少一个本机后端，确认 QQ 上线并完成用户配对。不要把安装完成报告为已经可用。
+目标：在当前系统用户下安装 QQ Agent Bot，配置 QQ 凭据及至少一个本机后端，确认 QQ 上线并完成用户配对。不要把安装完成报告为已经可用。
 
 ## 安装
+
+先判断平台。下文 PowerShell 示例用于 Windows。Linux/macOS 使用 Bash 安装器，命令参数与[平台说明](usage.md#平台支持)一致；macOS 尚未实机测试，不能报告为已验证。
+
+```bash
+curl -fL https://github.com/wllevy/qq-agent-bot/releases/latest/download/install.sh -o /tmp/qq-agent-bot-install.sh
+bash /tmp/qq-agent-bot-install.sh --skip-setup
+```
+
+Unix 默认命令为 `~/.local/bin/qq-agent-bot`，或 `<安装目录>/bin/qq-agent-bot`。下文 `& $Bot ...` 在 Bash 中替换为 `"$bot" ...`；配置 JSON 字段、诊断状态、配对步骤不变。Unix 的 Codex 使用已登录 CLI 或已有 app-server，未实现 Windows 桌面 IPC。Linux 可用 `service enable` 设置 systemd 用户服务；macOS 暂不支持登录自启动，使用 `service start`。
 
 需要 Windows PowerShell 5.1+、能访问 GitHub、npm 和 QQ。安装器复用 Node.js 24+；没有时下载私有 Node.js，不要求 Git、管理员权限或全局 npm 包。
 
@@ -32,7 +41,7 @@ $Bot = Join-Path $env:LOCALAPPDATA 'QQAgentBot/bin/qq-agent-bot.cmd'
 & $Bot migrate --from 'C:\path\to\old-bot' --json
 ```
 
-只支持当前 v4 消息订阅格式。复制配置、配对、会话、Claude 权限和订阅，转换附件缓存路径，保留原目录。迁移不复制系统用户的 Codex/Claude 登录；应使用同一 Windows 账户。失败时停止后续步骤，报告具体原因，不能通过覆盖目标绕过检查。
+只支持当前 v4 消息订阅格式。复制配置、配对、会话、Claude 权限和订阅，转换附件缓存路径，保留原目录。迁移不复制系统用户的 Codex/Claude 登录；应使用同一系统账户。失败时停止后续步骤，报告具体原因，不能通过覆盖目标绕过检查。
 
 ## 配置与登录
 

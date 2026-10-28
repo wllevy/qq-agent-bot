@@ -10,6 +10,7 @@ import type { ModelSettings, PreparedFile, Snapshot, SnapshotOptions, Thread, Tu
 
 export function codexExecutable(): string {
   if (process.env.CODEX_EXECUTABLE) return process.env.CODEX_EXECUTABLE;
+  if (process.platform !== 'win32') return 'codex';
   const root = join(process.env.LOCALAPPDATA || '', 'OpenAI', 'Codex', 'bin');
   const candidates = existsSync(root) ? readdirSync(root).map(dir => join(root, dir, 'codex.exe')).filter(existsSync) : [];
   // Installed runtime directories are immutable; the newest runtime is preferred.
@@ -34,10 +35,11 @@ export function desktopTurns(state: any): Turn[] {
 
 export class LocalCodex extends Codex {
   private rpc: StdioRPC;
-  private desktop = new DesktopIPC();
+  private desktop: Pick<DesktopIPC, 'owner' | 'snapshot' | 'request' | 'close'>;
   private snapshots = new Map<string, Promise<any>>();
-  constructor(executable = codexExecutable()) {
+  constructor(executable = codexExecutable(), desktopEnabled = true) {
     super('desktop');
+    this.desktop = desktopEnabled ? new DesktopIPC() : { owner: async () => undefined, snapshot: async () => { throw new Error('桌面 IPC 未启用'); }, request: async () => { throw new Error('桌面 IPC 未启用'); }, close() {} };
     this.rpc = new StdioRPC(executable);
     for (const event of ['notification', 'serverRequest']) this.rpc.on(event, m => this.emit(event, m));
   }

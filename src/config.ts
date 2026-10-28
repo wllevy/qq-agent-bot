@@ -20,7 +20,12 @@ function machines(): MachineConfig[] {
   }
   return entries;
 }
-function defaultEndpoint() { return process.env.CODEX_SOCKET || (process.platform === 'win32' ? 'desktop' : join(homedir(), '.codex/app-server-control/app-server-control.sock')); }
+function defaultEndpoint() {
+  if (process.env.CODEX_SOCKET) return process.env.CODEX_SOCKET;
+  if (process.platform === 'win32') return 'desktop';
+  const socket = join(homedir(), '.codex/app-server-control/app-server-control.sock');
+  return existsSync(socket) ? socket : 'stdio';
+}
 export function configuration() {
   const appId = process.env.QQBOT_APP_ID || process.env.AppID || process.env.APPID;
   const appSecret = process.env.QQBOT_APP_SECRET || process.env.AppSecret || process.env.APPSECRET;

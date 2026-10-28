@@ -1,6 +1,6 @@
 {
   "name": "qq-codex-console",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -15,7 +15,7 @@
     "doctor": "node dist/src/doctor.js",
     "smoke": "tsx scripts/smoke.ts",
     "smoke:claude": "tsx scripts/claude-smoke.ts",
-    "service": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows-service.ps1",
+    "service": "node dist/src/cli.js service",
     "menus": "node dist/scripts/menus.js",
     "export:source": "node scripts/export-source.mjs",
     "cli": "node dist/src/cli.js",

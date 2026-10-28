@@ -3,6 +3,8 @@
 [![Check](https://github.com/wllevy/qq-agent-bot/actions/workflows/check.yml/badge.svg)](https://github.com/wllevy/qq-agent-bot/actions/workflows/check.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Windows](https://img.shields.io/badge/platform-Windows-0078D4)
+![Linux](https://img.shields.io/badge/platform-Linux-FCC624)
+![macOS untested](https://img.shields.io/badge/macOS-未实机测试-gray)
 
 **在 QQ 私聊中继续电脑上的 Codex / Claude Code 任务，完成后接收回复和文件。**
 
@@ -35,17 +37,25 @@
   <img src="docs/images/qq-markdown.jpg" alt="QQ 客户端渲染模型回复中的 Markdown 表格和链接，表格提供复制、保存和全屏查看入口" width="480">
 </p>
 
-目前支持 **Windows + QQ 官方机器人私聊**。电脑需要保持开机联网，至少启用一个后端。[完整能力与使用说明 →](docs/usage.md)
+支持 QQ 官方机器人私聊。Windows、Linux 已测试；**macOS 提供实验性安装，尚未实机测试**。运行 Bot 的电脑需要保持开机联网，至少启用一个后端。[平台差异与使用说明 →](docs/usage.md#平台支持)
 
 ## 快速开始
 
-在 [QQ 开放平台](https://q.qq.com/) 准备支持私聊的机器人及 AppID / AppSecret。Codex 使用已登录的桌面应用；Claude 需要单独完成 SDK 登录。
+在 [QQ 开放平台](https://q.qq.com/) 准备支持私聊的机器人及 AppID / AppSecret。Windows 上 Codex 使用已登录的桌面应用，Linux/macOS 使用 CLI 或已有 app-server；Claude 需要单独完成 SDK 登录。
 
-在 PowerShell 中运行：
+Windows，在 PowerShell 中运行：
 
 ```powershell
 irm https://github.com/wllevy/qq-agent-bot/releases/latest/download/install.ps1 | iex
 ```
+
+Linux / macOS，在终端中运行：
+
+```bash
+bash -c "$(curl -fsSL https://github.com/wllevy/qq-agent-bot/releases/latest/download/install.sh)"
+```
+
+Linux/macOS 的 Codex 使用已登录的 CLI 或已有 app-server 连接；桌面会话实时 IPC 控制目前只在 Windows 上支持。Unix 命令默认链接到 `~/.local/bin`，不在 PATH 时按安装器提示使用完整路径。
 
 安装器自动准备 Node.js 和程序，无需预装 Git 或管理员权限。按向导配置后端，并用自己的 QQ 发送配对码、在电脑上确认授权。也可先[查看安装脚本](scripts/install.ps1)。
 

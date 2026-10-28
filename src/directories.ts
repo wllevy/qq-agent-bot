@@ -1,12 +1,12 @@
-import { isAbsolute, resolve } from 'node:path';
+import { targetPath } from './files.js';
 import type { State, Thread } from './types.js';
 
 export function rememberDirectories(state: State, machine: string, threads: Pick<Thread, 'cwd' | 'updatedAt'>[]) {
   const cache = state.directories ??= {};
   const directories = new Map((cache[machine] || []).map(entry => [entry.path, entry.lastUsed]));
   for (const thread of threads) {
-    if (!isAbsolute(thread.cwd)) continue;
-    const path = resolve(thread.cwd);
+    if (!targetPath(thread.cwd).isAbsolute(thread.cwd)) continue;
+    const path = targetPath(thread.cwd).normalize(thread.cwd);
     directories.set(path, Math.max(directories.get(path) || 0, thread.updatedAt || 0));
   }
   cache[machine] = [...directories].map(([path, lastUsed]) => ({ path, lastUsed })).sort((a, b) => b.lastUsed - a.lastUsed).slice(0, 200);

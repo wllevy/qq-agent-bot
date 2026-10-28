@@ -2,7 +2,7 @@ import { configuration, errorText } from './config.js';
 import { createBackend } from './client.js';
 import { makeBot } from './qq.js';
 import { execFile } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { claudeExecutable } from './claude-executable.js';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { PairingAccess } from './pairing.js';
@@ -36,8 +36,7 @@ export async function diagnose() {
   }
   if (config.machines.some(m => m.endpoint === 'claude')) {
     try {
-      const executable = process.env.CLAUDE_EXECUTABLE || (process.platform === 'win32'
-        ? createRequire(import.meta.url).resolve(`@anthropic-ai/claude-agent-sdk-win32-${process.arch}/claude.exe`) : 'claude');
+      const executable = claudeExecutable();
       const { stdout } = await promisify(execFile)(executable, ['auth', 'status'], { windowsHide: true, timeout: 15000 });
       if (JSON.parse(stdout).loggedIn !== true) throw new Error('未登录');
       checks.push({ name: 'claude-auth', ok: true, message: 'Claude SDK 已登录（未调用模型）' });

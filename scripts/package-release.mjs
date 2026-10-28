@@ -16,7 +16,7 @@ for (const directory of ['src', 'scripts']) {
   }
 }
 mkdirSync(join(destination, 'scripts'));
-for (const name of ['windows-service.ps1', 'supervisor.mjs', 'launcher.mjs', 'launcher.ps1', 'install.ps1']) cpSync(join(root, 'scripts', name), join(destination, 'scripts', name));
+for (const name of ['windows-service.ps1', 'supervisor.mjs', 'launcher.mjs', 'launcher.ps1', 'install.ps1', 'install.sh', 'install-unix.mjs']) cpSync(join(root, 'scripts', name), join(destination, 'scripts', name));
 mkdirSync(join(destination, 'docs/images'), { recursive: true });
 for (const name of ['agent-install.md', 'usage.md', 'development.md', 'images/qq-menu.jpg', 'images/qq-markdown.jpg']) cpSync(join(root, 'docs', name), join(destination, 'docs', name));
 console.log(destination);
