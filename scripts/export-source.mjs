@@ -16,4 +16,6 @@ for (const directory of ['src', 'test', 'scripts', 'docs', '.github/workflows'])
     if (entry.isFile() && /\.(ts|mjs|ps1|yml|md)$/.test(entry.name)) cpSync(join(root, directory, entry.name), join(target, directory, entry.name));
   }
 }
+mkdirSync(join(target, 'docs/images'), { recursive: true });
+cpSync(join(root, 'docs/images/qq-menu.jpg'), join(target, 'docs/images/qq-menu.jpg'));
 console.log(target);
