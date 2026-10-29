@@ -161,6 +161,6 @@ test('历史游标及操作菜单始终绑定查看的会话', async t => {
   await h.app.receive('u', next, 'next');
   assert.deepEqual(reads, ['old:', 'old:page/2']);
   await h.app.receive('u', '/操作 remote:old', 'ops');
-  assert.ok(h.replies.at(-1)!.buttons!.some(b => b.command === '/长期订阅 remote:old'));
+  assert.ok(h.replies.at(-1)!.buttons!.some(b => b.command === '/历史 remote:old'));
   assert.equal(h.store.chat('u').current, 'workstation:old');
 });

@@ -226,7 +226,7 @@ export class ConsoleApp {
     }
     const buttons = m[1] === '设置' ? [{ label: '选择模型', command: `/模型 ${id}` }, { label: '推理强度', command: `/推理强度 ${id}` }] : [
       { label: '文件', command: `/文件列表 ${id}` }, { label: '模型设置', command: `/设置 ${id}` },
-      ...(!chat.subscriptions[id]?.persistent ? [{ label: '长期订阅', command: `/长期订阅 ${id}` }] : []),
+      { label: '历史对答', command: `/历史 ${id}` },
       ...(this.isSubscribed(chat, id) ? [{ label: '取消订阅', command: `/取消订阅 ${id}` }] : []),
       { label: '消息订阅', command: '/订阅' },
       { label: '队列', command: `/队列 ${id}` }, { label: '停止任务', command: `/停止 ${id}` },

@@ -142,14 +142,14 @@ export function splitText(text: string, limit = 1700): string[] {
 }
 export function controls(thread: string, options: { current?: boolean; state?: string; empty?: boolean; view?: string } = {}): Button[] {
   const buttons: Button[] = [];
-  buttons.push({ label: '选中会话', command: `/选择 ${thread}` });
+  buttons.push({ label: '选中会话', command: `/选择 ${thread}` }, { label: '长期订阅', command: `/长期订阅 ${thread}` });
   if (options.empty) buttons.push({ label: '模型设置', command: `/设置 ${thread}` });
   else {
     buttons.push({ label: '刷新', command: `/最新 ${thread}` });
     if (['running', 'approval', 'input'].includes(options.state || '')) {
       if (options.view !== 'answer') buttons.push({ label: '上一轮对答', command: `/结果 ${thread}` });
       buttons.push({ label: '停止任务', command: `/停止 ${thread}` });
-    } else buttons.push({ label: '历史对答', command: `/历史 ${thread}` });
+    }
   }
   buttons.push({ label: '新建会话', command: `/新建会话 ${thread}` }, { label: '更多操作', command: `/操作 ${thread}` });
   return buttons;

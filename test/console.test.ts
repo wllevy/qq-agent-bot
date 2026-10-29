@@ -77,7 +77,7 @@ test('仅本轮订阅也显示取消入口，点击后任务继续且后续结�
   await app.receive('u', '继续处理', 'task');
   await app.receive('u', '/操作', 'operations');
   assert.ok(sender.sent.at(-1)!.buttons?.some(b => b.command === '/取消订阅 A'));
-  assert.ok(sender.sent.at(-1)!.buttons?.some(b => b.command === '/长期订阅 A'));
+  assert.ok(sender.sent.at(-1)!.buttons?.some(b => b.command === '/历史 A'));
   await app.receive('u', '/取消订阅 A', 'cancel');
   assert.equal(codex.snapshots.A!.turns[0]!.status, 'inProgress');
   assert.equal(store.chat('u').current, 'A');
