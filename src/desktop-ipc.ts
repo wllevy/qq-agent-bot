@@ -14,7 +14,7 @@ export class DesktopIPC extends EventEmitter {
   private closed = false;
   private client = 'initializing-client';
   private pending = new Map<string, { resolve: (v: any) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
-  constructor(private endpoint = '\\\\.\\pipe\\codex-ipc') { super(); }
+  constructor(private endpoint = '\\\\.\\pipe\\codex-ipc', private timeout = 20000) { super(); }
   async connect() {
     if (this.closed) throw new DesktopError('桌面连接已关闭');
     if (this.opening) return this.opening;
@@ -23,10 +23,12 @@ export class DesktopIPC extends EventEmitter {
     return this.opening;
   }
   private async open() {
+    if (this.socket) this.reset(this.socket, new DesktopError('Codex 桌面连接已失效，操作结果未知', true));
     const socket = connect(this.endpoint);
     this.socket = socket;
     let buffer = Buffer.alloc(0);
     socket.on('data', chunk => {
+      if (this.socket !== socket) return;
       buffer = Buffer.concat([buffer, chunk]);
       while (buffer.length >= 4) {
         const length = buffer.readUInt32LE(0);
@@ -47,20 +49,21 @@ export class DesktopIPC extends EventEmitter {
         } else if (message.type === 'broadcast') this.emit('broadcast', message);
       }
     });
-    socket.on('error', () => {});
+    socket.on('error', () => this.reset(socket, new DesktopError('Codex 桌面连接中断，操作结果未知', true)));
     socket.on('close', () => {
-      if (this.socket !== socket) return;
-      this.client = 'initializing-client';
-      for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new DesktopError('Codex 桌面连接中断，操作结果未知', true)); }
-      this.pending.clear();
+      this.reset(socket, new DesktopError('Codex 桌面连接中断，操作结果未知', true));
     });
+    try {
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => { socket.destroy(); reject(new DesktopError('连接 Codex 桌面端超时')); }, 5000);
+      const timer = setTimeout(() => { socket.destroy(); reject(new DesktopError('连接 Codex 桌面端超时')); }, Math.min(5000, this.timeout));
       socket.once('connect', () => { clearTimeout(timer); resolve(); });
       socket.once('error', () => { clearTimeout(timer); reject(new DesktopError('请先打开本机 Codex 桌面应用')); });
+      socket.once('close', () => { clearTimeout(timer); reject(new DesktopError('Codex 桌面连接已关闭')); });
     });
     const response = await this.call('initialize', { clientType: 'qqbot' }, 0);
+    if (this.closed || this.socket !== socket || !response.result?.clientId) throw new DesktopError('Codex 桌面握手未完成');
     this.client = response.result.clientId;
+    } catch (error) { this.reset(socket, error instanceof Error ? error : new DesktopError(String(error))); throw error; }
   }
   private write(message: unknown) {
     if (!this.socket || this.socket.destroyed) throw new DesktopError('Codex 桌面端未连接');
@@ -68,10 +71,12 @@ export class DesktopIPC extends EventEmitter {
     header.writeUInt32LE(body.length);
     this.socket.write(Buffer.concat([header, body]));
   }
-  private call(method: string, params: unknown, version: number, targetClientId?: string, timeout = 20000): Promise<any> {
+  private call(method: string, params: unknown, version: number, targetClientId?: string, timeout = this.timeout): Promise<any> {
+    const socket = this.socket;
+    if (!socket || socket.destroyed || this.closed) return Promise.reject(new DesktopError('Codex 桌面端未连接'));
     const requestId = randomUUID();
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new DesktopError(`${method} 超时，操作结果未知`, true)); }, timeout);
+      const timer = setTimeout(() => this.reset(socket, new DesktopError(`${method} 超时，操作结果未知`, true)), Math.min(timeout, this.timeout));
       this.pending.set(requestId, { resolve, reject, timer });
       try { this.write({ type: 'request', requestId, sourceClientId: this.client, method, params, version, targetClientId, timeoutMs: timeout }); }
       catch (error) { clearTimeout(timer); this.pending.delete(requestId); reject(error); }
@@ -104,5 +109,11 @@ export class DesktopIPC extends EventEmitter {
       try { follow(true); } catch (error) { cleanup(); reject(error); }
     });
   }
-  close() { this.closed = true; this.socket?.destroy(); }
+  private reset(socket: Socket, error: Error) {
+    if (this.socket !== socket) return;
+    this.socket = undefined; this.client = 'initializing-client';
+    for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(error); }
+    this.pending.clear(); socket.destroy();
+  }
+  close() { this.closed = true; if (this.socket) this.reset(this.socket, new DesktopError('桌面连接已关闭，操作结果未知', true)); }
 }

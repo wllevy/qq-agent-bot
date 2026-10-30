@@ -37,7 +37,7 @@ export class LocalCodex extends Codex {
   private rpc: StdioRPC;
   private desktop: Pick<DesktopIPC, 'owner' | 'snapshot' | 'request' | 'close'>;
   private snapshots = new Map<string, Promise<any>>();
-  constructor(executable = codexExecutable(), desktopEnabled = true) {
+  constructor(executable: string | (() => string) = codexExecutable, desktopEnabled = true) {
     super('desktop');
     this.desktop = desktopEnabled ? new DesktopIPC() : { owner: async () => undefined, snapshot: async () => { throw new Error('桌面 IPC 未启用'); }, request: async () => { throw new Error('桌面 IPC 未启用'); }, close() {} };
     this.rpc = new StdioRPC(executable);

@@ -9,7 +9,7 @@ export class StdioRPC extends EventEmitter {
   private closed = false;
   private sequence = 0;
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
-  constructor(private executable: string) { super(); }
+  constructor(private executable: string | (() => string), private args = ['app-server']) { super(); }
   async connect() {
     if (this.closed) throw new RpcError('本地 app-server 已关闭');
     if (this.opening) return this.opening;
@@ -18,18 +18,14 @@ export class StdioRPC extends EventEmitter {
     return this.opening;
   }
   private async open() {
-    const child = spawn(this.executable, ['app-server'], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(typeof this.executable === 'function' ? this.executable() : this.executable, this.args, { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child = child;
     child.stderr.on('data', () => {});
-    child.stdin.on('error', () => {});
-    const fail = () => {
-      if (this.child !== child) return;
-      this.child = undefined;
-      for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new RpcError('本地 app-server 连接中断，操作结果未知', undefined, true)); }
-      this.pending.clear();
-    };
+    const fail = () => this.reset(child, new RpcError('本地 app-server 连接中断，操作结果未知', undefined, true));
+    child.stdin.on('error', fail);
     child.on('error', fail); child.on('exit', fail);
     createInterface({ input: child.stdout }).on('line', line => {
+      if (this.child !== child) return;
       let m: any; try { m = JSON.parse(line); } catch { return; }
       if (m.method) { this.emit(m.id === undefined ? 'notification' : 'serverRequest', m); return; }
       const p = this.pending.get(m.id); if (!p) return;
@@ -43,14 +39,22 @@ export class StdioRPC extends EventEmitter {
   }
   call<T = any>(method: string, params: unknown, timeout = 20000): Promise<T> {
     if (!this.child || this.closed) return Promise.reject(new RpcError('本地 app-server 未连接'));
+    const child = this.child;
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new RpcError(`${method} 超时，操作结果未知`, undefined, true)); }, timeout);
+      const timer = setTimeout(() => this.reset(child, new RpcError(`${method} 超时，操作结果未知`, undefined, true)), timeout);
       this.pending.set(id, { resolve, reject, timer });
-      this.child!.stdin.write(JSON.stringify({ id, method, params }) + '\n', error => {
-        if (error) { clearTimeout(timer); this.pending.delete(id); reject(new RpcError(error.message, undefined, true)); }
+      child.stdin.write(JSON.stringify({ id, method, params }) + '\n', error => {
+        if (error) this.reset(child, new RpcError(error.message, undefined, true));
       });
     });
   }
-  close() { this.closed = true; this.child?.stdin.end(); this.child?.kill(); }
+  private reset(child: ChildProcessWithoutNullStreams, error: Error) {
+    if (this.child !== child) return;
+    this.child = undefined;
+    for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(error); }
+    this.pending.clear();
+    child.kill();
+  }
+  close() { this.closed = true; if (this.child) this.reset(this.child, new RpcError('本地 app-server 已关闭，操作结果未知', undefined, true)); }
 }

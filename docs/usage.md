@@ -16,6 +16,8 @@ Linux 默认安装到 `~/.local/share/qq-agent-bot`，macOS 默认 `~/Library/Ap
 
 Unix 的 Codex 优先连接已有 `~/.codex/app-server-control/app-server-control.sock`，否则运行 PATH 上的 `codex app-server`。需预先安装并登录 Codex CLI，也可用 `CODEX_EXECUTABLE` 指定路径、`CODEX_SOCKET` 指定 app-server 地址，或设为 `stdio`。Unix 版不会使用 Windows 桌面 IPC；同一会话请避免与其他执行端同时提交任务。Claude 继续使用官方 Agent SDK，`claude-login` 自动选择本平台随包安装的 CLI。
 
+Windows 上 Codex 桌面暂时关闭时，Bot 会保留订阅和待发队列；桌面重开后，后续轮询会自动重新连接。失效的辅助 app-server 会在下次访问时重新查找运行时并启动。已提交但结果未知的指令不会自动重发，需先核对会话结果。
+
 `service start/stop/restart/status --json` 在三个平台使用相同入口。Linux 的 `service enable` 注册 `qq-agent-bot.service` 用户服务，`disable` 仅取消自启动；需要可用的 systemd 用户管理器。退出登录后的持续运行取决于系统的用户 linger 设置，安装器不会修改它。macOS 暂时使用后台启动，重启机器后需手动启动。
 
 Unix 更新：等待任务完成后 `qq-agent-bot service stop`，重新下载安装脚本并运行 `bash install.sh --skip-setup`，诊断通过后再启动。脚本支持 `--home`、`--version`、`--package`（tar.gz）、`--node`、`--skip-setup`、`--no-path` 和 `--offline`；迁移仍使用 `migrate --from <旧目录> --json`，需在新安装首次配置前执行。
