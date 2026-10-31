@@ -6,7 +6,12 @@ export { terminal } from './domain.js';
 export const messages = (turn: Turn) => turn.items.filter(item => item.type === 'agentMessage' && item.text?.trim());
 export const title = (thread: Thread) => (thread.name || thread.preview || thread.id.slice(0, 8)).replace(/\s+/g, ' ').slice(0, 55);
 export const label = (thread: Thread) => `${thread.machine ? (thread.machine === 'claude' ? 'Claude' : thread.machine === 'local' ? 'Codex' : thread.machine) + " · " : ""}${basename(thread.cwd) || thread.cwd} · ${title(thread)}`;
-export const modelSummary = (thread: Thread) => `模型：${thread.model || '未提供'}\n推理强度：${thread.reasoningEffort || '默认或未提供'}`;
+export const modelSummary = (thread: Thread) => {
+  const effort = thread.reasoningEffort || (thread.reasoningEffortSource === 'default' ? '默认（由 Claude 决定）' : thread.reasoningEffortSource === 'environment' ? 'auto（不指定 effort）' : '默认或未提供');
+  const source = thread.reasoningEffortSource === 'settings' ? '（Claude 配置）' : thread.reasoningEffortSource === 'session' ? '（会话设置）' : thread.reasoningEffortSource === 'environment' ? '（环境变量覆盖）' : '';
+  const actual = thread.actualReasoningEffort !== undefined ? `\n${thread.actualReasoningEffortCurrent ? '本轮' : '上轮'}实际强度：${thread.actualReasoningEffort || '未发送 effort 参数'}` : '';
+  return `模型：${thread.model || '未提供'}\n推理强度：${effort}${source}${actual}`;
+};
 export function status(snapshot: Snapshot): string {
   return { running: '运行中', approval: '等待确认', input: '等待回答', error: '连接异常', failed: '执行失败', interrupted: '已中断', unloaded: '未加载', idle: '空闲' }[sessionStatus(snapshot)];
 }

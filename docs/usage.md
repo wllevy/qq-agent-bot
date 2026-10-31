@@ -88,6 +88,8 @@ qq-agent-bot claude-login
 
 `CLAUDE_PERMISSION_MODE=default` 使用权限确认；`bypassPermissions` 为 YOLO，允许免确认执行工具。此配置用于新会话及恢复副本，已有 Bot 会话续聊保留保存时的权限模式；问题澄清仍通过 QQ 回答。
 
+Claude 推理强度可在 QQ 的“模型设置 → 推理强度”中调整，默认模型也可直接设置。选择“默认”清除 Bot 的会话覆盖，继续跟随 Claude 配置；未配置时显示“默认（由 Claude 决定）”。会话卡片区分配置来源，并在 SDK 返回实际值后显示本轮或上轮实际强度。环境变量和组织策略可能覆盖或限制请求值；设置只作用于 Bot 管理的会话，不改写全局 Claude 配置。
+
 ### 启动与诊断
 
 ```powershell

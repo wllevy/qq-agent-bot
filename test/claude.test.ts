@@ -9,6 +9,7 @@ import { ClaudeBackend, historyTurns } from '../src/claude.js';
 import { MachineCodex } from '../src/machines.js';
 import { ConsoleApp } from '../src/console.js';
 import { Store } from '../src/store.js';
+import { modelSummary } from '../src/presentation.js';
 
 function setup(t: TestContext) {
   const previous = process.env.CLAUDE_PERMISSION_MODE;
@@ -19,6 +20,7 @@ function setup(t: TestContext) {
   const history = new Map<string, any>();
   const forks: string[] = [];
   const deps = {
+    async resolveSettings() { return { effective: {} as any }; },
     async listSessions() { return [...history.values()]; },
     async getSessionInfo(id: string) { return history.get(id); },
     async getSessionMessages() { return [
@@ -32,7 +34,7 @@ function setup(t: TestContext) {
       const q = Object.assign(stream, {
         close() { closed = true; wake?.(); },
         async interrupt() { q.close(); },
-        async supportedModels() { return [{ value: 'sonnet', resolvedModel: 'claude-test', displayName: 'Test', supportedEffortLevels: ['low', 'high'] }]; },
+        async supportedModels() { return [{ value: 'default', resolvedModel: 'claude-test', displayName: 'Default', supportedEffortLevels: ['low', 'high'] }, { value: 'sonnet', resolvedModel: 'claude-test', displayName: 'Test', supportedEffortLevels: ['low', 'high'] }]; },
       });
       calls.push({ args, push(value: any) { queue.push(value); wake?.(); }, q }); return q;
     },
@@ -41,6 +43,55 @@ function setup(t: TestContext) {
   t.after(async () => { await backend.close(); });
   return { dir, calls, history, forks, deps, backend };
 }
+
+test('Claude 默认模型可直接设置强度，默认配置和实际强度分开显示且不固定默认值', async t => {
+  const h = setup(t), id = (await h.backend.create('claude', h.dir, 'create')).id;
+  const replies: any[] = [];
+  const app = new ConsoleApp(new Store(join(h.dir, 'qq')), new MachineCodex({ claude: h.backend }), { async send(_user, text, options) { replies.push({ text, ...options }); return ['r']; } });
+  t.after(() => app.shutdown());
+  await app.receive('u', `/推理强度 claude:${id}`, 'menu');
+  assert.match(replies.at(-1).text, /默认（由 Claude 决定）/);
+  assert.ok(replies.at(-1).buttons.some((b: any) => b.command === `/设置强度 claude:${id} high`));
+  assert.ok(replies.at(-1).buttons.some((b: any) => b.command === `/设置强度 claude:${id} default`));
+  h.deps.resolveSettings = async () => ({ effective: { effortLevel: 'low', modelSettings: { 'claude-test': { effortLevel: 'high' } } } });
+  assert.equal((await h.backend.snapshot(id)).thread.reasoningEffort, 'high');
+  const saved = JSON.parse(readFileSync(join(h.dir, 'claude/state.json'), 'utf8'));
+  assert.equal(saved.sessions[id].thread.reasoningEffort, undefined);
+  await app.receive('u', `/设置强度 claude:${id} low`, 'set');
+  assert.equal((await h.backend.snapshot(id)).thread.reasoningEffortSource, 'session');
+  await assert.rejects(h.backend.updateSettings(id, { effort: 'invalid' }), /不支持/);
+  await h.backend.send(id, 'task', randomUUID());
+  const run = h.calls.at(-1);
+  assert.equal(run.args.options.effort, 'low');
+  run.push({ type: 'system', subtype: 'init', session_id: id, model: 'claude-test', effort: 'high' });
+  await tick();
+  assert.match(modelSummary((await h.backend.snapshot(id)).thread), /low（会话设置）[\s\S]*本轮实际强度：high/);
+  const observe = run.args.options.hooks.Stop[0].hooks[0];
+  await observe({ agent_id: 'subagent', effort: { level: 'low' } });
+  assert.equal((await h.backend.snapshot(id)).thread.actualReasoningEffort, 'high');
+  await observe({ effort: { level: 'low' } });
+  assert.equal((await h.backend.snapshot(id)).thread.actualReasoningEffort, 'low');
+  run.push({ type: 'result', subtype: 'success', result: 'ok', session_id: id }); await tick();
+  assert.match(modelSummary((await h.backend.snapshot(id)).thread), /上轮实际强度：low/);
+  await h.backend.updateSettings(id, { effort: 'default' });
+  assert.equal((await h.backend.snapshot(id)).thread.reasoningEffortSource, 'settings');
+  const restored = new ClaudeBackend(h.dir, h.dir, h.deps as any);
+  t.after(() => restored.close());
+  await restored.send(id, 'next', randomUUID());
+  assert.equal(h.calls.at(-1).args.options.effort, undefined);
+  assert.equal((await restored.snapshot(id)).thread.reasoningEffort, 'high');
+});
+
+test('Claude 显示环境覆盖，不将环境锁定下的强度更改报告为成功', async t => {
+  const h = setup(t), id = (await h.backend.create('claude', h.dir, 'create')).id;
+  const previous = process.env.CLAUDE_CODE_EFFORT_LEVEL;
+  t.after(() => { if (previous === undefined) delete process.env.CLAUDE_CODE_EFFORT_LEVEL; else process.env.CLAUDE_CODE_EFFORT_LEVEL = previous; });
+  process.env.CLAUDE_CODE_EFFORT_LEVEL = 'low';
+  assert.match(modelSummary((await h.backend.snapshot(id)).thread), /low（环境变量覆盖）/);
+  await assert.rejects(h.backend.updateSettings(id, { effort: 'high' }), /环境变量/);
+  process.env.CLAUDE_CODE_EFFORT_LEVEL = 'unset';
+  assert.match(modelSummary((await h.backend.snapshot(id)).thread), /auto（不指定 effort）/);
+});
 
 test('Claude 创建幂等、完成后重启恢复同一历史，不重复提交同一任务', async t => {
   const h = setup(t), id = (await h.backend.create('claude', h.dir, 'create')).id;

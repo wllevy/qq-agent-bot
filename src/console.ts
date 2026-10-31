@@ -409,17 +409,18 @@ export class ConsoleApp {
     this.reply(user, `[${label(snapshot.thread)}]\n${modelSummary(snapshot.thread)}\n\n选择模型 ${index + 1}/${Math.ceil(models.length / 8)}\n${lines.join('\n')}\n\n点击按钮或发送编号。也可发送：/设置模型 模型名\n修改对后续轮次生效。`, replyTo, thread, buttons);
   }
   private async effortMenu(user: string, thread: string, replyTo: string) {
-    const [snapshot, models] = await Promise.all([this.codex.snapshot(thread), this.codex.models(thread)]);
+    const models = await this.codex.models(thread);
+    const snapshot = await this.codex.snapshot(thread);
     const model = models.find(model => model.model === snapshot.thread.model);
     if (!model?.supportedReasoningEfforts.length) {
       this.reply(user, `[${label(snapshot.thread)}]\n${modelSummary(snapshot.thread)}\n\n当前模型没有提供可选推理强度，请先选择模型。`, replyTo, thread, [{ label: '选择模型', command: `/模型 ${thread}` }]);
       return;
     }
-    const values = model.supportedReasoningEfforts.map(option => option.reasoningEffort);
+    const values = [...(snapshot.thread.managed && snapshot.thread.reasoningEffortSource ? ['default'] : []), ...model.supportedReasoningEfforts.map(option => option.reasoningEffort)];
     this.resetMenu(this.store.chat(user));
     this.store.chat(user).settingsMenu = { thread, kind: 'effort', values };
-    const lines = values.map((effort, i) => `${i + 1}. ${effort}${effort === snapshot.thread.reasoningEffort ? ' · 当前' : ''}${effort === model.defaultReasoningEffort ? ' · 模型默认' : ''}`);
-    const buttons = values.map(effort => ({ label: effort, command: `/设置强度 ${thread} ${effort}` }));
+    const lines = values.map((effort, i) => `${i + 1}. ${effort === 'default' ? '默认（跟随 Claude 配置）' : effort}${effort === snapshot.thread.reasoningEffort || effort === 'default' && snapshot.thread.reasoningEffortSource !== 'session' ? ' · 当前' : ''}${effort === model.defaultReasoningEffort ? ' · 模型默认' : ''}`);
+    const buttons = values.map(effort => ({ label: effort === 'default' ? '默认' : effort, command: `/设置强度 ${thread} ${effort}` }));
     buttons.push({ label: '选择模型', command: `/模型 ${thread}` }, { label: '返回会话', command: `/最新 ${thread}` });
     this.reply(user, `[${label(snapshot.thread)}]\n${modelSummary(snapshot.thread)}\n\n选择推理强度\n${lines.join('\n')}\n\n点击按钮或发送编号。也可发送：/设置强度 high\n修改对后续轮次生效。`, replyTo, thread, buttons);
   }

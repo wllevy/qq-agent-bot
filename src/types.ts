@@ -3,6 +3,9 @@ export interface Thread {
   machine?: string;
   model?: string | null;
   reasoningEffort?: string | null;
+  reasoningEffortSource?: 'session' | 'settings' | 'default' | 'environment';
+  actualReasoningEffort?: string | null;
+  actualReasoningEffortCurrent?: boolean;
   id: string;
   name?: string | null;
   preview?: string;

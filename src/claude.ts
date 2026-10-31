@@ -5,14 +5,14 @@ import { mkdir, open, writeFile, stat, readFile } from 'node:fs/promises';
 import { dirname, join, resolve, isAbsolute } from 'node:path';
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
-import { query, listSessions, getSessionInfo, getSessionMessages, forkSession, type Query, type Options, type SDKMessage, type SessionMessage, type SDKUserMessage, type PermissionResult } from '@anthropic-ai/claude-agent-sdk';
+import { query, listSessions, getSessionInfo, getSessionMessages, forkSession, resolveSettings, type Query, type Options, type SDKMessage, type SessionMessage, type SDKUserMessage, type PermissionResult } from '@anthropic-ai/claude-agent-sdk';
 import { SubmissionError } from './domain.js';
 import { errorText } from './config.js';
 import type { CodexPort, Thread, Turn, Snapshot, ModelSettings, ModelOption, PreparedFile, AgentItem } from './types.js';
 
-const sdk = { query, listSessions, getSessionInfo, getSessionMessages, forkSession };
+const sdk = { query, listSessions, getSessionInfo, getSessionMessages, forkSession, resolveSettings };
 type Dependencies = typeof sdk;
-type Record = { thread: Thread; history: boolean; turns: Turn[]; sourceId?: string; requests: string[]; permissionMode?: 'bypassPermissions' };
+type Record = { thread: Thread; history: boolean; turns: Turn[]; sourceId?: string; requests: string[]; permissionMode?: 'bypassPermissions'; actualEffort?: string | null };
 type Pending = NonNullable<Snapshot['pendingAction']> & { resolve: (result: PermissionResult) => void; input: globalThis.Record<string, unknown>; questions?: any[] };
 type Runtime = { query?: Query; turn: Turn; done?: Promise<void>; stopped: boolean; pending?: Pending; permissionQueue?: Promise<PermissionResult> };
 
@@ -72,6 +72,26 @@ export class ClaudeBackend extends EventEmitter implements CodexPort {
     if (!record) throw new Error('这是已有 Claude 历史。发送“恢复”创建由 Bot 管理的独立副本，再继续任务。');
     return record;
   }
+  private async describe(record: Record): Promise<Thread> {
+    const thread = structuredClone(record.thread);
+    const config = (await this.deps.resolveSettings?.({ cwd: thread.cwd, settingSources: ['user', 'project', 'local'] }))?.effective;
+    const configuredModel = process.env.ANTHROPIC_MODEL || config?.model;
+    const selected = thread.model && thread.model !== '默认' ? thread.model : configuredModel;
+    const model = this.catalog?.find(m => m.model === selected || m.id === selected) || (!selected ? this.catalog?.find(m => m.id === 'default') : undefined);
+    thread.model = model?.model || selected || '默认';
+    const perModel = config?.modelSettings?.[thread.model];
+    const env = process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    const levels = ['low', 'medium', 'high', 'xhigh', 'max'];
+    const overridden = !!env && [...levels, 'auto', 'unset'].includes(env);
+    const inherited = perModel?.effortLevel || config?.effortLevel;
+    thread.reasoningEffort = overridden ? levels.includes(env!) ? env : null : record.thread.reasoningEffort || inherited || null;
+    thread.reasoningEffortSource = overridden ? 'environment' : record.thread.reasoningEffort ? 'session' : inherited ? 'settings' : 'default';
+    if (record.actualEffort !== undefined) {
+      thread.actualReasoningEffort = record.actualEffort;
+      thread.actualReasoningEffortCurrent = this.running.has(thread.id);
+    }
+    return thread;
+  }
   async list(): Promise<Thread[]> {
     const history = await this.deps.listSessions({ limit: 100 });
     return [...Object.values(this.records).map(r => structuredClone(r.thread)), ...history.filter(h => !this.records[h.sessionId] && h.cwd).map(h => ({ id: h.sessionId, name: h.customTitle || h.summary, cwd: h.cwd!, updatedAt: h.lastModified / 1000, status: { type: 'notLoaded' } }))]
@@ -103,7 +123,7 @@ export class ClaudeBackend extends EventEmitter implements CodexPort {
     const managed = this.records[id];
     if (managed) {
       const runtime = this.running.get(id), turn = managed.turns[0];
-      return structuredClone({ thread: managed.thread, turns: managed.turns,
+      return structuredClone({ thread: await this.describe(managed), turns: managed.turns,
         ...(runtime?.pending ? { pendingAction: { id: runtime.pending.id, kind: runtime.pending.kind, text: runtime.pending.text } } : {}),
         ...(runtime && turn ? { activity: { turnId: turn.id, entries: turn.items.slice(-30).reverse().map(item => ({ turnId: turn.id, item })) } } : {}),
       });
@@ -147,12 +167,15 @@ export class ClaudeBackend extends EventEmitter implements CodexPort {
     const record = this.managed(id);
     if (this.running.has(id)) throw new Error('请等待当前轮结束后再修改 Claude 模型设置');
     const catalog = await this.models(id);
-    const model = catalog.find(m => m.model === (settings.model || record.thread.model));
+    const current = await this.describe(record);
+    const target = settings.model || current.model;
+    const model = catalog.find(m => m.model === target || m.id === target) || (target === '默认' ? catalog.find(m => m.id === 'default') : undefined);
     if (!model) throw new Error('请先从模型菜单选择 Claude 模型');
-    if (settings.effort && !model.supportedReasoningEfforts.some(e => e.reasoningEffort === settings.effort)) throw new Error('该模型不支持此推理强度');
+    if (settings.effort && settings.effort !== 'default' && !model.supportedReasoningEfforts.some(e => e.reasoningEffort === settings.effort)) throw new Error('该模型不支持此推理强度');
+    if (settings.effort && settings.effort !== 'default' && current.reasoningEffortSource === 'environment' && settings.effort !== current.reasoningEffort) throw new Error('CLAUDE_CODE_EFFORT_LEVEL 正在覆盖推理强度，请先调整 Bot 的环境变量');
     record.thread.model = model.model;
-    record.thread.reasoningEffort = settings.effort || (model.supportedReasoningEfforts.some(e => e.reasoningEffort === record.thread.reasoningEffort) ? record.thread.reasoningEffort : null);
-    this.save(); return structuredClone(record.thread);
+    record.thread.reasoningEffort = settings.effort === 'default' ? null : settings.effort || (model.supportedReasoningEfforts.some(e => e.reasoningEffort === record.thread.reasoningEffort) ? record.thread.reasoningEffort : null);
+    this.save(); return this.describe(record);
   }
   async prepare(id: string) {
     if (this.closed) throw new Error('Claude 后端正在停止');
@@ -172,6 +195,7 @@ export class ClaudeBackend extends EventEmitter implements CodexPort {
     }
     const turn: Turn = { id: inputId, status: 'inProgress', startedAt: Date.now() / 1000, items: [{ id: inputId, type: 'userMessage', text }] };
     const runtime: Runtime = { turn, stopped: false };
+    delete record.actualEffort;
     this.running.set(id, runtime);
     record.turns.unshift(turn); record.turns = record.turns.slice(0, 100);
     record.thread.status = { type: 'active', activeFlags: [] }; record.thread.updatedAt = Date.now() / 1000;
@@ -183,6 +207,12 @@ export class ClaudeBackend extends EventEmitter implements CodexPort {
         ...(record.permissionMode === 'bypassPermissions' ? { permissionMode: 'bypassPermissions' as const, allowDangerouslySkipPermissions: true } : {}),
         ...(record.thread.model && record.thread.model !== '默认' ? { model: record.thread.model } : {}),
         ...(record.thread.reasoningEffort ? { effort: record.thread.reasoningEffort as Options['effort'] } : {}),
+        hooks: Object.fromEntries(['PreToolUse', 'Stop'].map(event => [event, [{ hooks: [async (input: import('@anthropic-ai/claude-agent-sdk').HookInput) => {
+          if (this.running.get(id) === runtime && !input.agent_id && ['low', 'medium', 'high', 'xhigh', 'max'].includes(input.effort?.level || '')) {
+            record.actualEffort = input.effort!.level; this.save();
+          }
+          return {};
+        }] }]])),
         canUseTool: (name, input, context) => this.permission(id, runtime, name, input, context.signal),
       } });
     } catch (error) {
@@ -240,7 +270,10 @@ export class ClaudeBackend extends EventEmitter implements CodexPort {
         if (runtime.stopped || this.closed) break;
         const m = message as any;
         if (m.type === 'system' && m.subtype === 'init' && m.session_id !== id) throw new Error('Claude 返回了不同的会话 ID，已停止该任务');
-        if (m.type === 'system' && m.subtype === 'init') { record.history = true; if (m.model) record.thread.model = m.model; }
+        if (m.type === 'system' && m.subtype === 'init') {
+          record.history = true; if (m.model) record.thread.model = m.model;
+          if (m.effort === null || ['low', 'medium', 'high', 'xhigh', 'max'].includes(m.effort)) record.actualEffort = m.effort;
+        }
         if (m.type === 'assistant' && !m.parent_tool_use_id) {
           const blocks = m.message?.content || [];
           const text = blocks.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n');
