@@ -81,7 +81,7 @@ assert.equal(JSON.parse(cli(stable, ['service', 'status', '--json'])).status, 's
 console.log('background lifecycle and busy upgrade guard passed');
 
 const future = join(root, 'future'); mkdirSync(future);
-run('tar', ['-xzf', archive, '-C', future]);
+run(windows ? join(process.env.SystemRoot, 'System32/tar.exe') : 'tar', ['-xzf', archive, '-C', future]);
 const metadataFile = join(future, 'package/package.json'), metadata = JSON.parse(readFileSync(metadataFile, 'utf8'));
 metadata.version = '99.0.0'; writeFileSync(metadataFile, JSON.stringify(metadata));
 run(process.execPath, [npm, 'pack', '--ignore-scripts', '--json', '--pack-destination', future], 0, join(future, 'package'));
