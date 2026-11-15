@@ -8,7 +8,7 @@ The bot can read files and run coding tasks with the operating-system privileges
 
 Never publish `.env`, `data/`, authentication files, attachments, logs or deployment backups. `npm run export:source` copies only the source allowlist to a new directory. Inspect the exported directory before publishing.
 
-Installed deployments keep credentials in `%LOCALAPPDATA%/QQAgentBot/config/.env` and runtime state in the adjacent `data` directory. Release packages contain compiled code and public configuration templates only; the installer downloads production dependencies from npm and, when needed, a private Node.js runtime from nodejs.org. Program updates do not overwrite configuration or data.
+Installed deployments keep credentials in the platform's user directory (`%LOCALAPPDATA%/QQAgentBot`, `~/.local/share/qq-agent-bot`, or `~/Library/Application Support/QQAgentBot`), in `config/.env`, with state in the adjacent `data` directory. `QQ_AGENT_HOME` overrides that location. The npm package includes compiled code and public configuration templates through an explicit `files` list. Bootstrap installers use npm with a user-owned prefix and download a private Node.js runtime from nodejs.org when needed. Stop the bot before upgrading; config and data live outside npm's program directory.
 
 Agent setup accepts secrets through a local JSON file, never command-line flags. Treat that input file as a credential file too. Machine-readable pairing still requires a local approval command with the exact request and sender IDs; the agent must obtain the operator's identity confirmation before invoking it. Diagnostic success, QQ gateway connection and control authorization are reported separately.
 

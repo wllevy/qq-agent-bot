@@ -1,11 +1,12 @@
 import { spawn, execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync, closeSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { runtimePaths } from './paths.js';
 import { errorText } from './config.js';
+import { startBackground } from './background.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const supervisor = join(root, 'scripts/supervisor.mjs');
@@ -13,10 +14,13 @@ const paths = runtimePaths(), data = paths.dataDir;
 const args = process.argv.slice(3), action = args[0] || 'status';
 const unitFile = join(homedir(), '.config/systemd/user/qq-agent-bot.service');
 const launcher = paths.home ? join(paths.home, 'bin/launcher.mjs') : join(root, 'dist/src/cli.js');
+const serviceExecutable = paths.home ? '/bin/sh' : process.execPath;
+const serviceLauncher = paths.home ? join(paths.home, 'bin/qq-agent-bot') : launcher;
 const systemctl = (...args: string[]) => execFileSync('systemctl', ['--user', ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
 function registered() {
   if (!existsSync(unitFile)) return false;
-  if (!readFileSync(unitFile, 'utf8').includes(launcher)) throw new Error('qq-agent-bot.service 属于另一个安装目录');
+  const unit = readFileSync(unitFile, 'utf8');
+  if (!unit.includes(serviceLauncher) && !unit.includes(launcher)) throw new Error('qq-agent-bot.service 属于另一个安装目录');
   return true;
 }
 function pid(name: string) {
@@ -42,13 +46,7 @@ async function stop() {
 async function start() {
   if (pid('supervisor.pid')) return;
   if (pid('bot.pid')) throw new Error('Bot 已在前台运行');
-  mkdirSync(data, { recursive: true, mode: 0o700 });
-  const out = openSync(join(data, 'bot.log'), 'a', 0o600), err = openSync(join(data, 'bot-error.log'), 'a', 0o600);
-  try {
-    const child = spawn(process.execPath, [supervisor], { cwd: root, env: process.env, detached: true, stdio: ['ignore', out, err] });
-    await new Promise<void>((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
-    child.unref();
-  } finally { closeSync(out); closeSync(err); }
+  await startBackground(root, data);
   await delay(1000);
   if (!pid('supervisor.pid')) throw new Error('后台启动失败，请检查 bot-error.log');
 }
@@ -66,10 +64,10 @@ async function main() {
     registered();
     if (action === 'enable') {
       const quote = (s: string) => '"' + s.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%').replaceAll('$', '$$') + '"';
-      if ([launcher, process.execPath].some(s => /[\r\n]/.test(s))) throw new Error('服务路径不能含换行');
+      if ([serviceLauncher, process.execPath].some(s => /[\r\n]/.test(s))) throw new Error('服务路径不能含换行');
       await stop();
       mkdirSync(dirname(unitFile), { recursive: true });
-      writeFileSync(unitFile, `[Unit]\nDescription=QQ Agent Bot\nAfter=network-online.target\n\n[Service]\nWorkingDirectory=${root.replaceAll('%', '%%')}\nExecStart=${quote(process.execPath)} ${quote(launcher)} service run\nEnvironment=${quote('PATH=' + (process.env.PATH || '/usr/bin:/bin'))}\nUMask=0077\nRestart=on-failure\nRestartSec=10\nTimeoutStopSec=55\n\n[Install]\nWantedBy=default.target\n`);
+      writeFileSync(unitFile, `[Unit]\nDescription=QQ Agent Bot\nAfter=network-online.target\n\n[Service]\nWorkingDirectory=${(paths.home || root).replaceAll('%', '%%')}\nExecStart=${quote(serviceExecutable)} ${quote(serviceLauncher)} service run\nEnvironment=${quote('PATH=' + (process.env.PATH || '/usr/bin:/bin'))}\nUMask=0077\nRestart=on-failure\nRestartSec=10\nTimeoutStopSec=55\n\n[Install]\nWantedBy=default.target\n`);
       systemctl('daemon-reload'); systemctl('enable', '--now', 'qq-agent-bot.service'); await delay(1000);
     } else if (existsSync(unitFile)) systemctl('disable', 'qq-agent-bot.service');
   } else if (action !== 'status') {

@@ -4,15 +4,22 @@ import { fileURLToPath } from 'node:url';
 import { claudeExecutable } from './claude-executable.js';
 import './config.js';
 import { runtimePaths } from './paths.js';
+import { registerInstallation, assertStopped } from './installation.js';
 
 const [command, ...args] = process.argv.slice(2);
 const entrypoints: Record<string, string> = { start: './main.js', setup: './setup.js', doctor: './doctor.js', pair: './pair.js', migrate: './migrate.js', menus: '../scripts/menus.js' };
 if (!command || ['help', '--help'].includes(command)) {
-  console.log('qq-agent-bot <setup|start|doctor|pair|service|migrate|menus|paths|version|claude-login>\n配置向导：setup；Agent 配置：setup --non-interactive --config-file <JSON> --json\n诊断：doctor --json；后台状态：service status --json；配对：pair --help');
+  console.log('qq-agent-bot <setup|start|doctor|pair|service|migrate|menus|paths|version|claude-login|install|preflight>\n配置向导：setup；Agent 配置：setup --non-interactive --config-file <JSON> --json\n诊断：doctor --json；后台状态：service status --json；配对：pair --help');
 } else if (command === 'version') {
   console.log(JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version);
 } else if (command === 'paths') {
   console.log(JSON.stringify(runtimePaths()));
+} else if (command === 'install' || command === 'preflight') {
+  try {
+    if (args.some(a => a !== '--json')) throw new Error('仅接受 --json');
+    if (command === 'preflight') { assertStopped(runtimePaths().dataDir); console.log(JSON.stringify({ status: 'stopped' })); }
+    else console.log(JSON.stringify(registerInstallation() || { status: 'source', message: '源码运行无需安装入口' }));
+  } catch (error) { console.log(JSON.stringify({ status: 'error', message: error instanceof Error ? error.message : String(error) })); process.exitCode = 1; }
 } else if (entrypoints[command] || command === 'service' || command === 'claude-login') {
   let executable = process.execPath, childArgs = [fileURLToPath(new URL(entrypoints[command] || './main.js', import.meta.url)), ...args];
   if (command === 'claude-login') {
@@ -21,6 +28,9 @@ if (!command || ['help', '--help'].includes(command)) {
     childArgs = ['auth', 'login', '--claudeai'];
   }
   if (command === 'service') {
+    if (['start', 'enable', 'restart'].includes(args[0] || 'status') && runtimePaths().home) {
+      registerInstallation(true);
+    }
     if (process.platform !== 'win32') {
       await import('./unix-service.js');
       process.exit(process.exitCode || 0);

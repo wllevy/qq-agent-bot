@@ -10,7 +10,7 @@ mkdirSync(target, { recursive: true });
 for (const name of ['package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.build.json', '.gitignore', '.gitattributes', '.env.example', 'README.md', 'SECURITY.md', 'LICENSE']) {
   cpSync(join(root, name), join(target, name));
 }
-for (const directory of ['src', 'test', 'scripts', 'docs', '.github/workflows']) {
+for (const directory of ['bin', 'src', 'test', 'scripts', 'docs', '.github/workflows']) {
   mkdirSync(join(target, directory), { recursive: true });
   for (const entry of readdirSync(join(root, directory), { withFileTypes: true })) {
     if (entry.isFile() && /\.(ts|mjs|ps1|sh|yml|md)$/.test(entry.name)) cpSync(join(root, directory, entry.name), join(target, directory, entry.name));

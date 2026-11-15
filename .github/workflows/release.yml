@@ -5,21 +5,11 @@ on:
 permissions:
   contents: write
 jobs:
-  linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: npm run check && npm test && npm run build && npm run package:release
-      - run: tar -czf release/qq-agent-bot.tar.gz -C release/package .
-      - run: node scripts/unix-smoke.mjs release/qq-agent-bot.tar.gz
-  release:
-    needs: linux
-    runs-on: windows-latest
+  verify:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,27 +17,34 @@ jobs:
           node-version: '24'
           cache: npm
       - name: Validate version
-        shell: pwsh
+        shell: bash
         run: |
-          $Version = (Get-Content package.json | ConvertFrom-Json).version
-          if ($env:GITHUB_REF_NAME -ne "v$Version") { throw 'Tag and package version differ' }
+          node -e 'if (process.env.GITHUB_REF_NAME !== "v" + JSON.parse(require("fs").readFileSync("package.json")).version) process.exit(1)'
       - run: npm ci
       - run: npm run check
       - run: npm test
-      - run: npm run build
       - run: npm run package:release
-      - name: Package and test installation
-        shell: pwsh
+      - name: Test npm installation and upgrades
+        shell: bash
         run: |
-          $Version = (Get-Content package.json | ConvertFrom-Json).version
-          Compress-Archive -Path release/package/* -DestinationPath "release/qq-agent-bot-v$Version.zip"
-          tar -czf release/qq-agent-bot.tar.gz -C release/package .
-          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-smoke.ps1 -PackagePath "release/qq-agent-bot-v$Version.zip"
-          if ($LASTEXITCODE -ne 0) { throw 'Installation smoke test failed' }
-      - name: Publish
-        shell: pwsh
+          version=$(node -p 'require("./package.json").version')
+          npm run smoke:install -- "release/qq-agent-bot-$version.tgz"
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: npm-package
+          path: release/*.tgz
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: release
+      - name: Publish GitHub assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $Version = (Get-Content package.json | ConvertFrom-Json).version
-          gh release create "v$Version" "release/qq-agent-bot-v$Version.zip" release/qq-agent-bot.tar.gz scripts/install.ps1 scripts/install.sh --verify-tag --generate-notes --title "QQ Agent Bot v$Version"
+          gh release create "$GITHUB_REF_NAME" release/*.tgz scripts/install.ps1 scripts/install.sh scripts/npm-install.mjs --verify-tag --generate-notes --title "QQ Agent Bot $GITHUB_REF_NAME"

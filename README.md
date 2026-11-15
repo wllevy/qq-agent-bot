@@ -43,7 +43,16 @@
 
 在 [QQ 开放平台](https://q.qq.com/) 准备支持私聊的机器人及 AppID / AppSecret。Windows 上 Codex 使用已登录的桌面应用，Linux/macOS 使用 CLI 或已有 app-server；Claude 需要单独完成 SDK 登录。
 
-Windows，在 PowerShell 中运行：
+已经安装 Node.js 24+ 时，三个平台使用相同命令：
+
+```bash
+npm install -g qq-agent-bot
+qq-agent-bot setup
+```
+
+安装后的 `qq-agent-bot` 可以在任意目录使用。升级前等待任务完成，执行 `qq-agent-bot service stop`，然后 `npm install -g qq-agent-bot@latest` 并重新启动。配置、会话和订阅保存在独立的用户目录。
+
+**还没装 Node.js？** 使用一键脚本，它会准备 Node.js，再通过 npm 安装同一个包。Windows 在 PowerShell 中运行：
 
 ```powershell
 irm https://github.com/wllevy/qq-agent-bot/releases/latest/download/install.ps1 | iex
@@ -55,9 +64,9 @@ Linux / macOS，在终端中运行：
 bash -c "$(curl -fsSL https://github.com/wllevy/qq-agent-bot/releases/latest/download/install.sh)"
 ```
 
-Linux/macOS 的 Codex 使用已登录的 CLI 或已有 app-server 连接；桌面会话实时 IPC 控制目前只在 Windows 上支持。Unix 命令默认链接到 `~/.local/bin`，不在 PATH 时按安装器提示使用完整路径。
+Linux/macOS 的 Codex 使用已登录的 CLI 或已有 app-server 连接；桌面会话实时 IPC 控制目前只在 Windows 上支持。
 
-安装器自动准备 Node.js 和程序，无需预装 Git 或管理员权限。按向导配置后端，并用自己的 QQ 发送配对码、在电脑上确认授权。也可先[查看安装脚本](scripts/install.ps1)。
+按向导配置后端，并用自己的 QQ 发送配对码、在电脑上确认授权。一键脚本采用用户目录内的 npm 安装，无需预装 Git 或管理员权限；更新时重新运行脚本即可。也可先[查看安装脚本](scripts/install.ps1)。
 
 Claude 登录未完成时，在新终端运行 `qq-agent-bot claude-login`，完成授权后用 `qq-agent-bot setup` 继续配置。
 

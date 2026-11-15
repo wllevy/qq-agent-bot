@@ -31,12 +31,17 @@ npm run check        # 类型检查
 npm test             # 不调用模型的行为测试
 npm run build        # 输出 dist/src 与 dist/scripts
 npm run cli -- --help # 统一命令入口
-npm run package:release # 将编译产物和运行文件打包到 release/package
+npm run package:release # 构建并生成 release/qq-agent-bot-X.Y.Z.tgz
+npm run smoke:install -- release/qq-agent-bot-X.Y.Z.tgz # 隔离目录中测试 npm 安装和升级
 npm run smoke        # 实际 Codex 自检
 npm run smoke:claude # 实际 Claude 自检
 ```
 
-两个模型 smoke 命令会创建独立自检会话并使用账户额度。Windows 和 Linux CI 执行类型检查、测试、构建；发布工作流额外用隔离目录测试生产依赖安装、JSON 配置和保留数据的版本更新，不登录 QQ、不调用模型。推送与 package.json 版本一致的 `vX.Y.Z` 标签后，工作流生成 ZIP、tar.gz 和 PowerShell/Bash 安装脚本。macOS 不运行 CI，当前标为未实机测试。
+两个模型 smoke 命令会创建独立自检会话并使用账户额度。Windows 和 Linux CI 执行类型检查、测试和真实 npm 安装验证；安装验证覆盖全局命令、固定数据目录、旧启动入口接续、后台启停、运行时拒绝升级，以及配置和订阅数据保留，不登录 QQ、不调用模型。macOS 当前标为未实机测试。
+
+`package.json` 的 `files` 明确限制 npm 包内容。`bin/qq-agent-bot.mjs` 设置安装版数据目录后进入编译的 CLI；源码命令继续沿用工作目录语义。`current.json` 只保存后台启动目标，npm 是程序版本的管理者。
+
+发布：先 `npm run package:release`，完成安装测试，再用已登录的维护者账号执行 `npm publish release/qq-agent-bot-X.Y.Z.tgz --access public`。推送与 package.json 版本一致的 `vX.Y.Z` 标签后，GitHub 工作流验证同一版本并上传 npm `.tgz` 包、一键安装脚本和 npm 安装辅助脚本。GitHub 工作流不持有 npm 登录凭据；npm 发布由维护者执行。
 
 导出可分享的源码：
 

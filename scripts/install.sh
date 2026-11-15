@@ -3,7 +3,7 @@ set -euo pipefail
 umask 077
 platform=$(uname -s)
 case "$platform" in
-  Linux) platform=linux; install_home="${QQ_AGENT_HOME:-$HOME/.local/share/qq-agent-bot}" ;;
+  Linux) platform=linux; install_home="${QQ_AGENT_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/qq-agent-bot}" ;;
   Darwin) platform=darwin; install_home="${QQ_AGENT_HOME:-$HOME/Library/Application Support/QQAgentBot}" ;;
   *) echo 'Only Linux and macOS are supported by this installer' >&2; exit 1 ;;
 esac
@@ -17,7 +17,7 @@ while [ $# -gt 0 ]; do
     --skip-setup) skip_setup=1; shift ;;
     --no-path) no_path=1; shift ;;
     --offline) offline=1; shift ;;
-    --help) echo 'install.sh [--home DIR] [--version vX.Y.Z] [--package FILE.tar.gz] [--node PATH] [--skip-setup] [--no-path] [--offline]'; exit 0 ;;
+    --help) echo 'install.sh [--home DIR] [--version vX.Y.Z] [--package FILE.tgz] [--node PATH] [--skip-setup] [--no-path] [--offline]'; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -35,17 +35,22 @@ if [ -z "$node_path" ] || ! "$node_path" -e 'process.exit(Number(process.version
   node_path="$runtime/node-v24.15.0-$platform-$arch/bin/node"
 fi
 export PATH="$(dirname "$node_path"):$PATH"
-stage=$(mktemp -d "$install_home/bootstrap.XXXXXX")
-if [ -z "$package" ]; then
-  [ "$offline" = 0 ] || { echo '--offline requires --package' >&2; exit 1; }
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-./install.sh}")" && pwd)
+helper="$script_dir/npm-install.mjs"
+if [ ! -f "$helper" ]; then
+  [ "$offline" = 0 ] || { echo 'Offline installation requires npm-install.mjs next to install.sh' >&2; exit 1; }
+  helper="$install_home/npm-bootstrap-$$.mjs"
   if [ "$version" = latest ]; then
-    asset=https://github.com/wllevy/qq-agent-bot/releases/latest/download/qq-agent-bot.tar.gz
+    url=https://github.com/wllevy/qq-agent-bot/releases/latest/download/npm-install.mjs
   else
     [[ "$version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Invalid version' >&2; exit 1; }
-    asset="https://github.com/wllevy/qq-agent-bot/releases/download/v${version#v}/qq-agent-bot.tar.gz"
+    url="https://github.com/wllevy/qq-agent-bot/releases/download/v${version#v}/npm-install.mjs"
   fi
-  package="$stage/package.tar.gz"
-  curl -fL --retry 2 "$asset" -o "$package"
+  curl -fL --retry 2 "$url" -o "$helper"
 fi
-tar -xzf "$package" -C "$stage"
-"$node_path" "$stage/scripts/install-unix.mjs" "$install_home" "$version" "$skip_setup" "$no_path" "$offline"
+args=("$helper" --home "$install_home" --version "$version")
+[ -z "$package" ] || args+=(--package "$package")
+[ "$skip_setup" = 0 ] || args+=(--skip-setup)
+[ "$no_path" = 0 ] || args+=(--no-path)
+[ "$offline" = 0 ] || args+=(--offline)
+"$node_path" "${args[@]}"

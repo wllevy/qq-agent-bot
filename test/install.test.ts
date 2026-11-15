@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { parse } from 'dotenv';
-import { runtimePaths } from '../src/paths.js';
+import { runtimePaths, defaultHome } from '../src/paths.js';
 import { validateSettings } from '../src/setup-config.js';
 import { migrate } from '../src/migrate.js';
 import { summarize } from '../src/doctor.js';
@@ -24,6 +24,8 @@ test('安装目录与工作目录无关，源码路径保持原语义', () => {
   assert.equal(runtimePaths({ QQ_AGENT_HOME: home }, cwd).dataDir, join(home, 'data'));
   assert.equal(runtimePaths({ QQ_AGENT_HOME: home, BOT_MACHINES_FILE: 'custom.json' }, cwd).machinesFile, join(home, 'config/custom.json'));
   assert.throws(() => runtimePaths({ QQ_AGENT_HOME: 'relative' }, cwd), /绝对路径/);
+  assert.equal(defaultHome({ LOCALAPPDATA: home }, 'win32'), join(home, 'QQAgentBot'));
+  assert.equal(defaultHome({ XDG_DATA_HOME: home }, 'linux'), join(home, 'qq-agent-bot'));
 });
 
 test('机器配置拒绝未知字段和注入，更换 AppID 必须更新凭据并清除旧静态授权', () => {

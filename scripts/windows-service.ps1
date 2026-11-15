@@ -32,7 +32,18 @@ try {
         if (Get-Supervisor) { return }
         if (Get-LiveProcess 'bot.pid' 'main.js') { throw 'Bot is already running in foreground' }
         New-Item -ItemType Directory -Force -Path $DataRoot | Out-Null
-        Start-Process -FilePath $NodePath -ArgumentList @('"' + (Join-Path $PSScriptRoot 'supervisor.mjs') + '"') -WorkingDirectory $BotRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $DataRoot 'bot.log') -RedirectStandardError (Join-Path $DataRoot 'bot-error.log') | Out-Null
+        # WMI starts the supervisor independently of this CLI's console and pipes.
+        $Startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{
+            ShowWindow = [uint16]0
+            CreateFlags = [uint32]1032 # DETACHED_PROCESS | CREATE_UNICODE_ENVIRONMENT
+            EnvironmentVariables = [string[]]@(Get-ChildItem Env: | ForEach-Object { $_.Name + '=' + $_.Value })
+        }
+        $Created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+            CommandLine = ('"' + $NodePath + '" "' + (Join-Path $PSScriptRoot 'supervisor.mjs') + '" --log-files')
+            CurrentDirectory = $BotRoot
+            ProcessStartupInformation = $Startup
+        }
+        if ($Created.ReturnValue -ne 0) { throw ('Could not start supervisor: Windows error ' + $Created.ReturnValue) }
         Start-Sleep -Seconds 2
         if (-not (Get-Supervisor)) { throw "Supervisor did not start; inspect $DataRoot/bot-error.log" }
     }
@@ -47,17 +58,20 @@ try {
         if (Get-Supervisor) { throw 'Bot has not stopped; inspect its logs' }
     }
     $Task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    $Launcher = if ($BotHome) { Join-Path $BotHome 'bin/launcher.mjs' } else { Join-Path $BotRoot 'dist/src/cli.js' }
+    $Launcher = if ($BotHome) { Join-Path $BotHome 'bin/launcher.ps1' } else { Join-Path $BotRoot 'dist/src/cli.js' }
     if ($Task -and $Action -in @('enable','disable') -and -not ($Task.Actions.Arguments -like ('*"' + $Launcher + '"*'))) {
         # Legacy source task points at this exact PowerShell script.
-        if ($BotHome -or -not ($Task.Actions.Arguments -like ('*"' + $PSCommandPath + '"*'))) { throw 'The task name belongs to another installation' }
+        $LegacyLauncher = if ($BotHome) { Join-Path $BotHome 'bin/launcher.mjs' } else { $PSCommandPath }
+        if (-not ($Task.Actions.Arguments -like ('*"' + $LegacyLauncher + '"*'))) { throw 'The task name belongs to another installation' }
     }
     switch ($Action) {
         'start' { Start-Bot }
         'stop' { Stop-Bot }
         'restart' { Stop-Bot; Start-Bot }
         'enable' {
-            $TaskAction = New-ScheduledTaskAction -Execute $NodePath -Argument ('"' + $Launcher + '" service start') -WorkingDirectory $BotRoot
+            $TaskAction = if ($BotHome) {
+                New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $Launcher + '" service start') -WorkingDirectory $BotHome
+            } else { New-ScheduledTaskAction -Execute $NodePath -Argument ('"' + $Launcher + '" service start') -WorkingDirectory $BotRoot }
             $User = [Security.Principal.WindowsIdentity]::GetCurrent().Name
             $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $User
             $Principal = New-ScheduledTaskPrincipal -UserId $User -LogonType Interactive -RunLevel Limited

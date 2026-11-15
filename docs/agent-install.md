@@ -4,7 +4,17 @@
 
 ## 安装
 
-先判断平台。下文 PowerShell 示例用于 Windows。Linux/macOS 使用 Bash 安装器，命令参数与[平台说明](usage.md#平台支持)一致；macOS 尚未实机测试，不能报告为已验证。
+先判断平台和 Node.js 版本。已有 Node.js 24+ 时，三个平台优先使用 npm：
+
+```bash
+npm install -g qq-agent-bot
+qq-agent-bot version
+qq-agent-bot paths
+```
+
+npm 包提供 `qq-agent-bot` 命令并自动选择固定用户数据目录，可以从任意工作目录调用。`npx qq-agent-bot ...` 适合临时查看帮助、路径或诊断；后台服务使用永久 npm 安装，不能绑定 npx 缓存目录。
+
+没有 Node.js 24+ 或全局 npm 目录没有写权限时，使用一键安装器：它准备私有 Node.js，并用 `<QQ_AGENT_HOME>/npm` 作为 npm prefix 安装同一个包，不需要管理员权限。下文 PowerShell 示例用于 Windows。Linux/macOS 使用 Bash 安装器，参数见[平台说明](usage.md#平台支持)；macOS 尚未实机测试，报告中保留这一状态。
 
 ```bash
 curl -fL https://github.com/wllevy/qq-agent-bot/releases/latest/download/install.sh -o /tmp/qq-agent-bot-install.sh
@@ -13,7 +23,7 @@ bash /tmp/qq-agent-bot-install.sh --skip-setup
 
 Unix 默认命令为 `~/.local/bin/qq-agent-bot`，或 `<安装目录>/bin/qq-agent-bot`。下文 `& $Bot ...` 在 Bash 中替换为 `"$bot" ...`；配置 JSON 字段、诊断状态、配对步骤不变。Unix 的 Codex 使用已登录 CLI 或已有 app-server，未实现 Windows 桌面 IPC。Linux 可用 `service enable` 设置 systemd 用户服务；macOS 暂不支持登录自启动，使用 `service start`。
 
-需要 Windows PowerShell 5.1+、能访问 GitHub、npm 和 QQ。安装器复用 Node.js 24+；没有时下载私有 Node.js，不要求 Git、管理员权限或全局 npm 包。
+Windows 一键安装需要 PowerShell 5.1+，以及能访问 GitHub、npm 和 QQ。它复用 Node.js 24+；没有时下载私有 Node.js。
 
 ```powershell
 $Installer = Join-Path $env:TEMP 'qq-agent-bot-install.ps1'
@@ -21,9 +31,9 @@ Invoke-WebRequest -UseBasicParsing https://github.com/wllevy/qq-agent-bot/releas
 & $Installer -SkipSetup
 ```
 
-默认安装目录 `%LOCALAPPDATA%\QQAgentBot`。可用 `-InstallHome <绝对路径>` 改位置；`-Version vX.Y.Z` 固定版本；`-NoPath` 不修改用户 PATH；`-PackagePath <本地发布 ZIP>` 使用本地包。`-Offline` 还要求已存在 Node.js 24+ 和完整 npm 缓存，不表示发布 ZIP 包含全部依赖。
+Windows 默认用户目录 `%LOCALAPPDATA%\QQAgentBot`。可用 `-InstallHome <绝对路径>` 改位置；`-Version vX.Y.Z` 固定 npm 版本；`-NoPath` 不修改用户 PATH；`-PackagePath <本地 npm .tgz>` 使用本地包。`-Offline` 还要求已存在 Node.js 24+ 和完整 npm 缓存。`install.ps1` 与 `npm-install.mjs` 应放在同一目录，在线运行时会自动下载辅助脚本。
 
-当前终端尚未刷新 PATH 时，使用完整路径调用：
+直接 npm 安装使用 npm 的全局命令；一键安装后当前终端尚未刷新 PATH 时，使用完整路径调用：
 
 ```powershell
 $Bot = Join-Path $env:LOCALAPPDATA 'QQAgentBot/bin/qq-agent-bot.cmd'
@@ -111,6 +121,6 @@ service 状态为 `starting` 时隔几秒再次查询，最多等 30 秒；`onli
 
 ## 更新
 
-等任务完成，运行 `service stop`，重新执行安装器 `-SkipSetup`。安装器拒绝更新运行中的实例；下载/依赖失败时不切换当前版本。版本文件在 `versions`，配置在 `config`，运行数据在 `data`，升级保留旧程序版本和所有运行数据。
+等任务完成后先运行 `service stop`。直接 npm 安装使用 `npm install -g qq-agent-bot@latest` 更新同一全局目录；一键安装继续执行安装器 `-SkipSetup`，更新其独立 npm prefix。配置在 `config`，运行数据在 `data`，不放进 npm 包目录。直接运行 npm 升级前应先停止 Bot；一键安装器还会检查运行状态并拒绝带任务更新。
 
-更新后执行诊断，再 `service start`。稳定启动入口读取 `current.json`；既有登录启动任务继续使用此入口。不要手动删除用户配置、历史或旧版本。`service disable` 取消登录启动，`service stop` 停止后台，两者独立。
+更新后执行诊断，再 `service start`。切换 npm prefix 或 Node.js 安装时，用新命令执行 `service enable` 更新稳定启动目标。稳定入口读取 `current.json`，npm 管理程序版本；既有 Release 安装原地升级时会接续原配置和数据，旧程序目录保留。`service disable` 取消登录启动，`service stop` 停止后台，两者独立。

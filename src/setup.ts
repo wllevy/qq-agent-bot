@@ -70,7 +70,7 @@ async function setup() {
   for (const check of report.checks) console.log(`${check.ok ? 'OK' : '待处理'} ${check.name}：${check.message}`);
   if (!['ready', 'needs_pairing'].includes(report.status)) { console.log('配置已保存，但尚不可用。完成上述登录或连接修复后重新运行 setup。'); process.exitCode = 1; return; }
   if (await confirm('现在配对你的 QQ？')) await runPairing(configuration());
-  if (process.platform === 'win32' && await confirm('设置当前 Windows 用户登录后自动启动 Bot，并立即启动？')) {
+  if (['win32', 'linux'].includes(process.platform) && await confirm('设置当前用户登录后自动启动 Bot，并立即启动？')) {
     const script = fileURLToPath(new URL('./cli.js', import.meta.url));
     await new Promise<void>((resolve, reject) => {
       const child = spawn(process.execPath, [script, 'service', 'enable'], { stdio: 'inherit', windowsHide: true });

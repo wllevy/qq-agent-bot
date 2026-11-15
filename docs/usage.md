@@ -10,9 +10,9 @@
 | Linux | Bash 安装器、后台进程、systemd 用户服务 | 在 Linux x86_64 上验证安装、配置、升级、进程管理与测试套件；实际 QQ 聊天和模型执行仍取决于用户账户配置 |
 | macOS | Bash 安装器、后台进程 | **尚未实机测试**；Intel / Apple Silicon 按架构安装，暂不提供 launchd 登录启动 |
 
-Unix 安装器需要 Bash、curl、tar，复用 Node.js 24+ 或下载私有运行时。Linux 的自动运行时下载面向 glibc 系统；Alpine/musl 需自行提供兼容的 Node.js 24+。
+推荐 `npm install -g qq-agent-bot`，要求 Node.js 24+。Unix 一键安装器需要 Bash、curl、tar，复用 Node.js 24+ 或下载私有运行时，然后通过 npm 安装。Linux 的自动运行时下载面向 glibc 系统；Alpine/musl 需自行提供兼容的 Node.js 24+。
 
-Linux 默认安装到 `~/.local/share/qq-agent-bot`，macOS 默认 `~/Library/Application Support/QQAgentBot`。`config`、`data`、`versions` 的结构与 Windows 相同。命令链接到 `~/.local/bin/qq-agent-bot`，需要把 `~/.local/bin` 加入 PATH，或使用安装器输出的完整路径。
+Linux 数据目录默认 `~/.local/share/qq-agent-bot`（遵循 `XDG_DATA_HOME`），macOS 默认 `~/Library/Application Support/QQAgentBot`。`config`、`data` 的结构与 Windows 相同。直接 npm 安装的命令由 npm 加入全局 bin；一键安装会把命令链接到 `~/.local/bin/qq-agent-bot`，需要把 `~/.local/bin` 加入 PATH，或使用安装器输出的完整路径。
 
 Unix 的 Codex 优先连接已有 `~/.codex/app-server-control/app-server-control.sock`，否则运行 PATH 上的 `codex app-server`。需预先安装并登录 Codex CLI，也可用 `CODEX_EXECUTABLE` 指定路径、`CODEX_SOCKET` 指定 app-server 地址，或设为 `stdio`。Unix 版不会使用 Windows 桌面 IPC；同一会话请避免与其他执行端同时提交任务。Claude 继续使用官方 Agent SDK，`claude-login` 自动选择本平台随包安装的 CLI。
 
@@ -20,7 +20,7 @@ Windows 上 Codex 桌面暂时关闭时，Bot 会保留订阅和待发队列；�
 
 `service start/stop/restart/status --json` 在三个平台使用相同入口。Linux 的 `service enable` 注册 `qq-agent-bot.service` 用户服务，`disable` 仅取消自启动；需要可用的 systemd 用户管理器。退出登录后的持续运行取决于系统的用户 linger 设置，安装器不会修改它。macOS 暂时使用后台启动，重启机器后需手动启动。
 
-Unix 更新：等待任务完成后 `qq-agent-bot service stop`，重新下载安装脚本并运行 `bash install.sh --skip-setup`，诊断通过后再启动。脚本支持 `--home`、`--version`、`--package`（tar.gz）、`--node`、`--skip-setup`、`--no-path` 和 `--offline`；迁移仍使用 `migrate --from <旧目录> --json`，需在新安装首次配置前执行。
+Unix 一键安装的更新：等待任务完成后 `qq-agent-bot service stop`，重新下载安装脚本并运行 `bash install.sh --skip-setup`，诊断通过后再启动。脚本支持 `--home`、`--version`、`--package`（npm `.tgz` 包）、`--node`、`--skip-setup`、`--no-path` 和 `--offline`；迁移仍使用 `migrate --from <旧目录> --json`，需在新安装首次配置前执行。
 
 ## 能力表
 
@@ -45,13 +45,13 @@ Codex 桌面接入使用内部 IPC，最初验证版本为 **26.1021.3705.0**；
 ```text
 %LOCALAPPDATA%\QQAgentBot\
   bin\                  稳定命令入口
-  versions\0.4.0\       程序与生产依赖
+  npm\                  一键安装使用的 npm prefix（直接 npm 安装时程序在 npm 全局目录）
   config\.env           QQ 凭据与后端配置
   data\                 会话、订阅、附件、配对和日志
-  current.json          当前程序版本
+  current.json          后台服务指向的程序和 Node.js 路径
 ```
 
-源码运行时不设置 `QQ_AGENT_HOME`，沿用项目目录 `.env` 和 `data/`，命令在项目根目录执行。两种运行方式使用相同后端与消息订阅逻辑。
+npm 命令不依赖当前工作目录；`QQ_AGENT_HOME` 可指定其他绝对路径。源码运行时不设置 `QQ_AGENT_HOME`，沿用项目目录 `.env` 和 `data/`，命令在项目根目录执行。两种运行方式使用相同后端与消息订阅逻辑。
 
 重跑 `qq-agent-bot setup` 会保留已有值，不修改会话、订阅和已保存的 Claude 会话权限。Bot 正在运行时，先等任务结束再停止；单独新增配对无需停机。源码部署对应命令为 `npm run setup`。
 
@@ -146,7 +146,18 @@ qq-agent-bot service disable
 
 `enable` 设置当前用户登录启动并立即启动，`disable` 仅取消登录启动。后台运行编译后的程序，日志在 `data/bot.log` 和 `data/bot-error.log`。
 
-安装版更新：先等待 Bot 管理的任务结束，再停止、下载并运行安装器。`-SkipSetup` 保留现有配置，安装完成后诊断并启动：
+npm 全局安装的更新：先等待 Bot 管理的任务结束，再停止并更新：
+
+```bash
+qq-agent-bot service stop
+npm install -g qq-agent-bot@latest
+qq-agent-bot doctor
+qq-agent-bot service start
+```
+
+需要切换 Node.js 或 npm 的全局目录时，停止旧实例后更新；用新命令执行 `service enable`，即可将自启动入口指向新安装。
+
+**一键安装使用独立的 npm prefix**，更新时继续运行安装器，它会更新同一位置的 npm 包。`-SkipSetup` 保留现有配置：
 
 ```powershell
 qq-agent-bot service stop
@@ -157,7 +168,9 @@ qq-agent-bot doctor
 qq-agent-bot service start
 ```
 
-下载和依赖安装成功后才切换程序版本。配置与数据独立保存，旧版本保留；已启用的登录启动任务通过稳定入口读取新版本。`-Version vX.Y.Z` 可选择版本，其他安装参数见 [Agent 安装指南](agent-install.md)。
+程序版本由 npm 管理。配置与数据独立保存，已启用的登录启动任务通过稳定入口读取程序。`-Version vX.Y.Z` 可安装指定 npm 版本，回退也使用相同方式。其他安装参数见 [Agent 安装指南](agent-install.md)。
+
+从旧的 Release 安装版升级时，停止 Bot 后直接运行新脚本 `-SkipSetup`，原 `config` 和 `data` 原地沿用，旧 `versions` 目录保留；之后程序改由 npm 管理。原来的 `current.json` 启动任务继续有效。
 
 重启会中断 Bot 运行的 Claude 和辅助 app-server 任务。源码更新使用 `npm run service -- stop`、`npm ci`、`npm run build`、`npm run service -- start`。
 

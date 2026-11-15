@@ -1,7 +1,6 @@
 {
-  "name": "qq-codex-console",
-  "version": "0.5.2",
-  "private": true,
+  "name": "qq-agent-bot",
+  "version": "0.6.0",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -19,7 +18,9 @@
     "menus": "node dist/scripts/menus.js",
     "export:source": "node scripts/export-source.mjs",
     "cli": "node dist/src/cli.js",
-    "package:release": "node scripts/package-release.mjs"
+    "package:release": "node scripts/pack.mjs",
+    "prepack": "npm run build",
+    "smoke:install": "node scripts/npm-smoke.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.310",
@@ -44,5 +45,26 @@
   "homepage": "https://github.com/wllevy/qq-agent-bot#readme",
   "bugs": {
     "url": "https://github.com/wllevy/qq-agent-bot/issues"
-  }
+  },
+  "bin": {
+    "qq-agent-bot": "bin/qq-agent-bot.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "bin/",
+    "dist/src/*.js",
+    "dist/scripts/menus.js",
+    "scripts/supervisor.mjs",
+    "scripts/launcher.mjs",
+    "scripts/launcher.ps1",
+    "scripts/windows-service.ps1",
+    "scripts/install.ps1",
+    "scripts/install.sh",
+    "docs/",
+    ".env.example",
+    "scripts/npm-install.mjs",
+    "SECURITY.md"
+  ]
 }
