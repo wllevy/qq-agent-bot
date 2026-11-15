@@ -47,4 +47,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release/*.tgz scripts/install.ps1 scripts/install.sh scripts/npm-install.mjs --verify-tag --generate-notes --title "QQ Agent Bot $GITHUB_REF_NAME"
+          version=$(node -p 'require("./package.json").version')
+          release_flags=()
+          if ! npm view "qq-agent-bot@$version" version >/dev/null 2>&1; then
+            release_flags=(--prerelease --latest=false)
+          fi
+          gh release create "$GITHUB_REF_NAME" release/*.tgz scripts/install.ps1 scripts/install.sh scripts/npm-install.mjs --verify-tag --generate-notes --title "QQ Agent Bot $GITHUB_REF_NAME" "${release_flags[@]}"
