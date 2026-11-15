@@ -43,7 +43,7 @@ npm run smoke:claude # 实际 Claude 自检
 
 发布：先 `npm run package:release`，完成安装测试，再用已登录的维护者账号执行 `npm publish ./release/qq-agent-bot-X.Y.Z.tgz --access public`。推送与 package.json 版本一致的 `vX.Y.Z` 标签后，GitHub 工作流验证同一版本并上传 npm `.tgz` 包、一键安装脚本和 npm 安装辅助脚本。GitHub 工作流不持有 npm 登录凭据；npm 发布由维护者执行。
 
-对应 npm 版本尚未上架时，GitHub 工作流创建预发布，正式一键安装入口继续指向上一版本。补完 npm 发布后，执行 `gh release edit vX.Y.Z --prerelease=false --latest` 转为正式版。
+对应 npm 版本尚未上架时，GitHub 工作流创建预发布，正式一键安装入口继续指向上一版本。npm 首次发布可能先进入服务端自动审核；等 `npm view qq-agent-bot@X.Y.Z version` 返回目标版本，并从 registry 试装成功后，再执行 `gh release edit vX.Y.Z --prerelease=false --latest` 转为正式版。
 
 导出可分享的源码：
 
