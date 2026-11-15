@@ -41,7 +41,7 @@ npm run smoke:claude # 实际 Claude 自检
 
 `package.json` 的 `files` 明确限制 npm 包内容。`bin/qq-agent-bot.mjs` 设置安装版数据目录后进入编译的 CLI；源码命令继续沿用工作目录语义。`current.json` 只保存后台启动目标，npm 是程序版本的管理者。
 
-发布：先 `npm run package:release`，完成安装测试，再用已登录的维护者账号执行 `npm publish release/qq-agent-bot-X.Y.Z.tgz --access public`。推送与 package.json 版本一致的 `vX.Y.Z` 标签后，GitHub 工作流验证同一版本并上传 npm `.tgz` 包、一键安装脚本和 npm 安装辅助脚本。GitHub 工作流不持有 npm 登录凭据；npm 发布由维护者执行。
+发布：先 `npm run package:release`，完成安装测试，再用已登录的维护者账号执行 `npm publish ./release/qq-agent-bot-X.Y.Z.tgz --access public`。推送与 package.json 版本一致的 `vX.Y.Z` 标签后，GitHub 工作流验证同一版本并上传 npm `.tgz` 包、一键安装脚本和 npm 安装辅助脚本。GitHub 工作流不持有 npm 登录凭据；npm 发布由维护者执行。
 
 导出可分享的源码：
 
