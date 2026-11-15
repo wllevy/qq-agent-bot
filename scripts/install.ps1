@@ -1,4 +1,4 @@
-﻿# QQ Agent Bot installer. Run in Windows PowerShell 5.1 or PowerShell 7.
+# QQ Agent Bot installer. Run in Windows PowerShell 5.1 or PowerShell 7.
 [CmdletBinding()]
 param(
     [string]$InstallHome = $(if ($env:QQ_AGENT_HOME) { $env:QQ_AGENT_HOME } else { Join-Path $env:LOCALAPPDATA 'QQAgentBot' }),

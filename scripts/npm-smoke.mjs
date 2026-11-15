@@ -29,6 +29,11 @@ function install(target, pkg, expected = 0) {
 }
 
 // Exercise npm's actual global binary wrapper, using a temporary prefix only.
+if (windows) {
+  const parse = join(root, 'inline-installer.ps1');
+  writeFileSync(parse, "$ErrorActionPreference='Stop'\n[scriptblock]::Create([Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($args[0]))) | Out-Null\n");
+  run('powershell.exe', ['-NoProfile', '-File', parse, resolve('scripts/install.ps1')]);
+}
 run(process.execPath, [npm, 'install', '-g', '--prefix', prefix, '--no-audit', '--no-fund', archive]);
 const version = JSON.parse(readFileSync(join(globalRoot, 'package.json'), 'utf8')).version;
 assert.equal(cli(globalBin, ['version']), version);
