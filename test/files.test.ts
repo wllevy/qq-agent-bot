@@ -79,7 +79,7 @@ test('纯附件绑定原会话，离线时先下载，重启后随下一条要�
 
 test('最终回答候选只缓存成果，离线可取缓存；发送失败后重启复用上传结果', async t => {
   const h = await setup(t);
-  h.snapshots.A!.turns = [{ id: 'turn', status: 'completed', items: [{ id: 'answer', type: 'agentMessage', phase: 'final_answer', text: '[报告](./report.pdf) [代码](./code.ts:3) [网页](https://example.com/file.pdf)' }] }];
+  h.snapshots.A!.turns = [{ id: 'turn', status: 'completed', items: [{ id: 'answer', type: 'agentMessage', phase: 'final_answer', text: ':codex-file-citation{path="/project/A/report.pdf" purpose="output"} [报告](./report.pdf) [代码](./code.ts:3) [网页](https://example.com/file.pdf)' }] }];
   await h.app.receive('u', '/选择 A', 'select');
   await h.app.files.tick();
   const files = Object.values(h.store.state.files!);
@@ -139,4 +139,28 @@ test('只从最终回答收集本机文件链接，排除网页和中途消息',
     { id: 'a', type: 'agentMessage', phase: 'final_answer', text: '[报告](<./my report.pdf>) [代码](/project/a.ts#L4) [网站](https://example.com/a.pdf) [报告](./my%20report.pdf)' },
   ] }, '/project');
   assert.deepEqual(files.map(file => file.path), ['/project/my report.pdf', '/project/a.ts']);
+});
+
+test('Codex 文件引用兼容属性顺序、空格、Unicode 和 Markdown 去重，忽略非输出及无效引用', () => {
+  const files = linkedFiles({ id: 't', status: 'completed', items: [
+    { id: 'p', type: 'agentMessage', phase: 'commentary', text: ':codex-file-citation{path="/tmp/draft.pdf" purpose="output"}' },
+    { id: 'a', type: 'agentMessage', phase: 'final_answer', text: [
+      ':codex-file-citation{path="/home/operator/Downloads/report/02_outputs/current/report_v1.pdf" purpose="output"}',
+      ':codex-file-citation{purpose="output" path="./报告 {最终}.pdf"}',
+      '[报告](<./报告 {最终}.pdf>)',
+      ":codex-file-citation{path='./no-purpose.pdf'}",
+      ':codex-file-citation{path="/tmp/source.pdf" purpose="input"}',
+      ':codex-file-citation{path="https://example.com/report.pdf" purpose="output"}',
+      ':codex-file-citation{path="one.pdf" path="two.pdf" purpose="output"}',
+      ':codex-file-citation{path="broken.pdf" garbage}',
+      ':codex-file-citation{path="bad\\u0000.pdf" purpose="output"}',
+    ].join('\n') },
+  ] }, '/project');
+  assert.deepEqual(files.map(f => f.path).sort(), ['/home/operator/Downloads/report/02_outputs/current/report_v1.pdf', '/project/报告 {最终}.pdf', '/project/no-purpose.pdf'].sort());
+});
+
+test('Codex 文件引用识别原始及 JSON 转义的 Windows 路径', () => {
+  const file = String.raw`C:\project\new folder\report.pdf`;
+  const files = linkedFiles({ id: 't', status: 'completed', items: [{ id: 'a', type: 'agentMessage', text: `:codex-file-citation{path="${file}" purpose="output"} :codex-file-citation{purpose="output" path=${JSON.stringify(file)}}` }] }, 'C:\\project');
+  assert.deepEqual(files, [{ path: file, name: 'report.pdf' }]);
 });

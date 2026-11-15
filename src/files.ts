@@ -20,13 +20,27 @@ export function linkedFiles(turn: Turn, cwd: string): { path: string; name: stri
   const finals = all.filter(item => item.phase === 'final_answer');
   const text = (finals.length ? finals : all.slice(-1)).map(item => item.text).join('\n');
   const paths = new Map<string, string>();
-  for (const match of text.matchAll(/!?\[([^\]]*)\]\((?:<([^>]+)>|([^\n]*?))\)/g)) {
-    let path = (match[2] || match[3] || '').trim().replace(/\s+"[^"]*"$/, '');
+  const candidates = [...text.matchAll(/!?\[([^\]]*)\]\((?:<([^>]+)>|([^\n]*?))\)/g)].map(match => (match[2] || match[3] || '').trim().replace(/\s+"[^"]*"$/, ''));
+  for (const citation of text.matchAll(/:codex-file-citation\{((?:[^{}"']|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')*)\}/g)) {
+    const attrs = new Map<string, string>(); let invalid = false;
+    const rest = citation[1]!.replace(/([\w-]+)\s*=\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/g, (_all, key: string, quoted: string) => {
+      if (attrs.has(key)) invalid = true;
+      let value = quoted.slice(1, -1);
+      // Raw Windows paths can contain sequences such as \\new; do not turn
+      // those into JSON control characters. JSON-escaped paths still decode.
+      if (quoted.startsWith('"') && !/^[a-z]:\\(?!\\)|^\\\\(?!\\)/i.test(value)) {
+        try { value = JSON.parse(quoted); } catch { invalid = true; }
+      }
+      attrs.set(key, value); return '';
+    });
+    if (!invalid && !rest.trim() && attrs.has('path') && (!attrs.has('purpose') || attrs.get('purpose') === 'output')) candidates.push(attrs.get('path')!);
+  }
+  for (let path of candidates) {
     if (/^(?:https?:|mailto:|data:|#)/i.test(path)) continue;
     path = path.replace(/^(?:file:\/\/|sandbox:)/, '').replace(/#L\d+(?:C\d+)?(?:-L?\d+)?$/, '').replace(/:\d+(?::\d+)?$/, '');
     try { path = decodeURIComponent(path); } catch {}
     if (/^\/[a-z]:\//i.test(path)) path = path.slice(1);
-    if (!path || path.includes('\0') || (/^[a-zA-Z]+:/.test(path) && !/^[a-z]:[\\/]/i.test(path))) continue;
+    if (!path || /[\x00-\x1f]/.test(path) || (/^[a-zA-Z]+:/.test(path) && !/^[a-z]:[\\/]/i.test(path))) continue;
     path = targetPath(cwd).resolve(cwd, path);
     if (!extname(path)) continue;
     paths.set(path, safeName(path));
